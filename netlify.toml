@@ -1,0 +1,19 @@
+# Netlify publie le dossier dist/ tel qu'il est versionné, sans rien construire.
+#
+# C'est délibéré : le plan gratuit facture les builds en crédits, et ce projet
+# n'a pas besoin d'en consommer — le build est un simple recollage de fichiers,
+# fait en local avant chaque commit. Le test « dist à jour » garantit que le
+# dossier publié correspond bien aux sources.
+[build]
+  publish = "dist"
+  command = ""
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
