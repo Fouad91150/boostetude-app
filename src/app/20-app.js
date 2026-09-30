@@ -348,7 +348,7 @@ function App() {
       letterSpacing: "2px",
       textTransform: "uppercase"
     }
-  }, "Boost'Étude", !isAdmin && monProfil?.nom ? ` — ${monProfil.nom}` : ""), /*#__PURE__*/React.createElement("div", {
+  }, "Boost'Étude", !isAdmin && monProfil ? ` — ${[monProfil.prenom, monProfil.nom].filter(Boolean).join(" ")}` : ""), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 20,
       fontWeight: 800,

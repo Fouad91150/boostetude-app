@@ -61,8 +61,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "2.0.0";
-window.__APP_BUILD = "2026-09-29";
+<script>window.__APP_VERSION = "2.1.0";
+window.__APP_BUILD = "2026-09-30";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -1650,7 +1650,7 @@ function FicheEleve({
     }
   }, eleve.niveau, " • ", eleve.th, "€/h • ", groupeNom))), [{
     t: "💰 Facturation",
-    rows: [["Tarif/h", `${eleve.th}€`], ["3 séances", `${eleve.th * 6}€`], ["4 séances", `${eleve.th * 8}€`], ["5 séances", `${eleve.th * 10}€`], ["Mode", eleve.mp]]
+    rows: [["Tarif horaire", `${eleve.th} €`], ["Séance de 2 h", `${eleve.th * 2} €`], ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
     rows: [["Nom", eleve.parent || "—"], ["Tél", eleve.tel || "—"], ["Email", eleve.email || "—"]]
@@ -1807,7 +1807,7 @@ function ModuleEleves({
   }, toast), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr 1fr",
+      gridTemplateColumns: "1fr 1fr",
       gap: 8,
       marginBottom: 16
     }
@@ -1816,11 +1816,6 @@ function ModuleEleves({
     v: actifs.length,
     l: "Actifs",
     c: C.gold
-  }, {
-    e: "💰",
-    v: `${actifs.reduce((s, e) => s + e.th * 8, 0)}€`,
-    l: "CA estimé",
-    c: C.green
   }, {
     e: "📋",
     v: eleves.length,
@@ -1938,13 +1933,6 @@ function ModuleEleves({
       marginTop: 2
     }
   }, e.niveau, " • ", e.th, "€/h • ", matieresDe(e.id))), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 15,
-      fontWeight: 800,
-      color: C.gold,
-      fontFamily: FD
-    }
-  }, e.th * 8, "€"), /*#__PURE__*/React.createElement("span", {
     style: {
       color: C.gray,
       fontSize: 16
@@ -5472,7 +5460,7 @@ function App() {
       letterSpacing: "2px",
       textTransform: "uppercase"
     }
-  }, "Boost'Étude", !isAdmin && monProfil?.nom ? ` — ${monProfil.nom}` : ""), /*#__PURE__*/React.createElement("div", {
+  }, "Boost'Étude", !isAdmin && monProfil ? ` — ${[monProfil.prenom, monProfil.nom].filter(Boolean).join(" ")}` : ""), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 20,
       fontWeight: 800,

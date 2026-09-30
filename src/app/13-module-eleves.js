@@ -90,7 +90,7 @@ function ModuleEleves({
   }, toast), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr 1fr",
+      gridTemplateColumns: "1fr 1fr",
       gap: 8,
       marginBottom: 16
     }
@@ -99,11 +99,6 @@ function ModuleEleves({
     v: actifs.length,
     l: "Actifs",
     c: C.gold
-  }, {
-    e: "💰",
-    v: `${actifs.reduce((s, e) => s + e.th * 8, 0)}€`,
-    l: "CA estimé",
-    c: C.green
   }, {
     e: "📋",
     v: eleves.length,
@@ -221,13 +216,6 @@ function ModuleEleves({
       marginTop: 2
     }
   }, e.niveau, " • ", e.th, "€/h • ", matieresDe(e.id))), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 15,
-      fontWeight: 800,
-      color: C.gold,
-      fontFamily: FD
-    }
-  }, e.th * 8, "€"), /*#__PURE__*/React.createElement("span", {
     style: {
       color: C.gray,
       fontSize: 16
