@@ -105,7 +105,8 @@ function BtnPrimary({
 }
 function BtnSecondary({
   label,
-  onClick
+  onClick,
+  full
 }) {
   return /*#__PURE__*/React.createElement("button", {
     onClick: onClick,
@@ -119,6 +120,7 @@ function BtnSecondary({
       color: C.cream,
       cursor: "pointer",
       fontFamily: "inherit",
+      width: full ? "100%" : "auto",
       boxShadow: "0 2px 8px rgba(0,0,0,.18)"
     }
   }, label);

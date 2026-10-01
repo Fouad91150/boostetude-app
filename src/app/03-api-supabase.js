@@ -1,7 +1,14 @@
 // ─── API SUPABASE ────────────────────────────────────────────
+// Douze mois glissants : la borne du chargement initial.
+const depuisUnAn = () => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 1);
+  return d.toISOString().slice(0, 10);
+};
 const api = {
   async fetchAll(isAdmin) {
-    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), sb.from("cours").select("*"), sb.from("presences").select("*"), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
+    const borne = depuisUnAn();
+    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), sb.from("cours").select("*").gte("date", borne), sb.from("presences").select("*").gte("date", borne), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
     for (const r of [el, gr, co, pr, eg]) if (r.error) throw r.error;
     const elList = (el.data || []).map(normalizeEleveDB);
     const egList = eg.data || [];
@@ -333,7 +340,7 @@ Object.assign(api, {
 // ─── API SUIVI DE SÉANCE & BILANS ────────────────────────────
 Object.assign(api, {
   async fetchComptesRendus() {
-    const { data, error } = await sb.from("comptes_rendus").select("*").order("date", { ascending: false });
+    const { data, error } = await sb.from("comptes_rendus").select("*").gte("date", depuisUnAn()).order("date", { ascending: false });
     if (error) throw error;
     return data || [];
   },

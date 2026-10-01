@@ -26,7 +26,7 @@ function ModuleFacturation({
       setModal(null);
       showToast(data.statut === "paye" ? "🎉 Facture payée !" : "Facture enregistrée ✓");
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
   };
   // Renvoie true si la suppression a bien eu lieu (permet d'attendre la confirmation
@@ -40,7 +40,7 @@ function ModuleFacturation({
       showToast("Facture supprimée ✓");
       ok = true;
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSuppression(false);
     return ok;
@@ -57,7 +57,7 @@ function ModuleFacturation({
       showToast("Facture en cours supprimée ✓");
       ok = true;
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSuppression(false);
     return ok;

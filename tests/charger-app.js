@@ -17,6 +17,7 @@ const reponseVide = { data: [], error: null };
 const requete = () => {
   const r = {
     select: () => r, order: () => r, eq: () => r, neq: () => r, in: () => r,
+    gte: () => r, lte: () => r, gt: () => r, lt: () => r,
     maybeSingle: () => ({ data: null, error: null }), single: () => ({ data: null, error: null }),
     insert: () => r, update: () => r, upsert: () => r, delete: () => r,
     then: (f) => Promise.resolve(reponseVide).then(f)
@@ -45,23 +46,46 @@ export function chargerApp() {
     appendChild() {}, setAttribute() {}
   });
 
-  const fenetre = { supabase: { createClient: () => sbFactice }, isSecureContext: true, __APP_VERSION: "test" };
+  const fenetre = {
+    supabase: { createClient: () => sbFactice }, isSecureContext: true, __APP_VERSION: "test",
+    addEventListener() {}, removeEventListener() {}
+  };
   const doc = {
     createElement: elementFactice,
     body: { appendChild() {}, removeChild() {} },
     execCommand: () => true
   };
 
-  return new Function("React", "window", "document", "navigator", "URL", "Blob", script + `
+  return new Function("React", "window", "document", "navigator", "URL", "Blob", "localStorage", script + `
     return { VueImpression, ModuleReglages, OngletEntreprise, OngletLivreRecettes, OngletDonnees,
              BlocConformite, champsManquants, versCSV, ModuleFacturation, ModuleAppel, App, api, C,
              ModuleSuivi, ModuleBilans, CarteBilan, CarteSuiviEleve,
              bilanDonnees, makeBilanWhatsApp, makeBilanSMS, makeBilanEmail,
              lundiDe, addJours, isoSemaine, libelleSemaine, telWhatsApp, splitNotions,
-             estCompteRenduVide, phrase };
-  `)(React, fenetre, doc, { clipboard: null },
+             estCompteRenduVide, phrase,
+             Local, fileAppels, envoyerAppel, rejouerFileAppels, estPanneReseau,
+             cleBrouillonAppel, Signal, signalerErreur, signalerSucces, signalerInfo,
+             PileBandeaux, BandeauHorsLigne };
+  `)(React, fenetre, doc, { clipboard: null, onLine: true },
      { createObjectURL: () => "blob:x", revokeObjectURL() {} },
-     function Blob() {});
+     function Blob() {},
+     memoireLocale());
+}
+
+/**
+ * Stockage local factice. Le vrai peut être refusé par le navigateur ; les tests
+ * couvrent aussi ce cas en passant `{ casse: true }`, qui fait échouer chaque
+ * accès comme le ferait une navigation privée verrouillée.
+ */
+export function memoireLocale({ casse = false } = {}) {
+  const sac = new Map();
+  const boum = () => { throw new Error("localStorage indisponible"); };
+  return {
+    getItem: k => (casse ? boum() : (sac.has(k) ? sac.get(k) : null)),
+    setItem: (k, v) => (casse ? boum() : void sac.set(k, String(v))),
+    removeItem: k => (casse ? boum() : void sac.delete(k)),
+    get taille() { return sac.size; }
+  };
 }
 
 /** Élève et facture représentatifs de ce que produit l'application. */

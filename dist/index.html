@@ -61,8 +61,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "2.1.0";
-window.__APP_BUILD = "2026-09-30";
+<script>window.__APP_VERSION = "2.2.0";
+window.__APP_BUILD = "2026-10-01";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -161,9 +161,16 @@ const normalizeGroupeDB = (g, elevesList, egList) => {
   };
 };
 // ─── API SUPABASE ────────────────────────────────────────────
+// Douze mois glissants : la borne du chargement initial.
+const depuisUnAn = () => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 1);
+  return d.toISOString().slice(0, 10);
+};
 const api = {
   async fetchAll(isAdmin) {
-    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), sb.from("cours").select("*"), sb.from("presences").select("*"), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
+    const borne = depuisUnAn();
+    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), sb.from("cours").select("*").gte("date", borne), sb.from("presences").select("*").gte("date", borne), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
     for (const r of [el, gr, co, pr, eg]) if (r.error) throw r.error;
     const elList = (el.data || []).map(normalizeEleveDB);
     const egList = eg.data || [];
@@ -495,7 +502,7 @@ Object.assign(api, {
 // ─── API SUIVI DE SÉANCE & BILANS ────────────────────────────
 Object.assign(api, {
   async fetchComptesRendus() {
-    const { data, error } = await sb.from("comptes_rendus").select("*").order("date", { ascending: false });
+    const { data, error } = await sb.from("comptes_rendus").select("*").gte("date", depuisUnAn()).order("date", { ascending: false });
     if (error) throw error;
     return data || [];
   },
@@ -617,6 +624,127 @@ const telWhatsApp = tel => {
   if (t.startsWith("0")) return "33" + t.slice(1);
   return t;
 };
+// ─── RÉSEAU ET BROUILLONS LOCAUX ─────────────────────────────
+// Une salle de cours n'est pas un bureau : le wifi tombe, la 4G traverse mal le
+// béton, l'onglet se ferme. Tant que l'appel ne vivait qu'en mémoire, une coupure
+// l'effaçait sans bruit. Il s'écrit désormais d'abord dans le navigateur ; il ne
+// part vers Supabase qu'ensuite, et attend le retour du réseau s'il le faut.
+
+// Le stockage local peut être refusé (navigation privée, réglages stricts).
+// Dans ce cas on perd le filet, jamais l'application : tout est en try/catch.
+const Local = {
+  lire(cle, defaut) {
+    try {
+      const v = localStorage.getItem(cle);
+      return v == null ? defaut : JSON.parse(v);
+    } catch (e) {
+      return defaut;
+    }
+  },
+  ecrire(cle, valeur) {
+    try {
+      localStorage.setItem(cle, JSON.stringify(valeur));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+  effacer(cle) {
+    try {
+      localStorage.removeItem(cle);
+    } catch (e) {}
+  }
+};
+
+const cleBrouillonAppel = (groupeId, date) => `bo:appel:${groupeId}:${date}`;
+const CLE_FILE_APPELS = "bo:file-appels";
+
+// Un appel qui n'a pas pu partir reste ici jusqu'à ce qu'il parte. Une seule
+// entrée par groupe et par date : le dernier état saisi fait foi.
+const fileAppels = {
+  lire: () => {
+    const f = Local.lire(CLE_FILE_APPELS, []);
+    return Array.isArray(f) ? f : [];
+  },
+  ajouter(entree) {
+    const reste = fileAppels.lire().filter(x => !(x.groupeId === entree.groupeId && x.date === entree.date));
+    reste.push({ ...entree, depuis: new Date().toISOString() });
+    Local.ecrire(CLE_FILE_APPELS, reste);
+  },
+  retirer(groupeId, date) {
+    Local.ecrire(CLE_FILE_APPELS, fileAppels.lire().filter(x => !(x.groupeId === groupeId && x.date === date)));
+  },
+  vider: () => Local.ecrire(CLE_FILE_APPELS, [])
+};
+
+// Distinguer « le réseau a manqué » de « le serveur a refusé ». Une erreur de
+// droits ou de données doit remonter à l'utilisateur ; une coupure doit être
+// mise de côté et rejouée.
+const estPanneReseau = e => {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+  const m = ((e && e.message) || "").toLowerCase();
+  return m.includes("failed to fetch") || m.includes("networkerror") ||
+         m.includes("load failed") || m.includes("network request failed") ||
+         m.includes("timeout");
+};
+
+// Enregistre l'appel, ou le garde sous le coude. Renvoie ce qui s'est passé pour
+// que l'écran puisse le dire honnêtement plutôt que d'afficher une fausse réussite.
+async function envoyerAppel(envoyer, groupeId, date, presMap) {
+  try {
+    await envoyer(groupeId, date, presMap);
+    fileAppels.retirer(groupeId, date);
+    Local.effacer(cleBrouillonAppel(groupeId, date));
+    return { envoye: true };
+  } catch (e) {
+    if (estPanneReseau(e)) {
+      fileAppels.ajouter({ groupeId, date, presMap });
+      Local.ecrire(cleBrouillonAppel(groupeId, date), presMap);
+      return { envoye: false, enAttente: true };
+    }
+    throw e;
+  }
+}
+
+// Vide la file dès que la connexion revient. Les échecs restent en file : on
+// réessaiera au prochain retour de réseau plutôt que de boucler.
+async function rejouerFileAppels(envoyer) {
+  const file = fileAppels.lire();
+  if (!file.length) return { rejoues: 0, restants: 0 };
+  let rejoues = 0;
+  for (const entree of file) {
+    try {
+      await envoyer(entree.groupeId, entree.date, entree.presMap);
+      fileAppels.retirer(entree.groupeId, entree.date);
+      Local.effacer(cleBrouillonAppel(entree.groupeId, entree.date));
+      rejoues++;
+    } catch (e) {
+      if (!estPanneReseau(e)) {
+        // Le serveur refuse cet appel : le garder en file le ferait échouer
+        // indéfiniment. On le sort et on le signale.
+        fileAppels.retirer(entree.groupeId, entree.date);
+        signalerErreur(e);
+      }
+    }
+  }
+  return { rejoues, restants: fileAppels.lire().length };
+}
+
+// État de la connexion, rafraîchi par le navigateur lui-même.
+function useEnLigne() {
+  const [enLigne, setEnLigne] = useState(typeof navigator === "undefined" || navigator.onLine !== false);
+  useEffect(() => {
+    const monter = () => setEnLigne(true);
+    const tomber = () => setEnLigne(false);
+    window.addEventListener("online", monter);
+    window.addEventListener("offline", tomber);
+    return () => {
+      window.removeEventListener("online", monter);
+      window.removeEventListener("offline", tomber);
+    };
+  }, []);
+  return enLigne;
+}
 // ─── FACTURATION CUMULATIVE ────────────────────────────────────
 // La dernière facture payée d'un élève marque la fin de la période déjà réglée.
 // Tout ce qui suit (séances présentes après cette date) s'accumule sur une facture
@@ -797,7 +925,8 @@ function BtnPrimary({
 }
 function BtnSecondary({
   label,
-  onClick
+  onClick,
+  full
 }) {
   return /*#__PURE__*/React.createElement("button", {
     onClick: onClick,
@@ -811,6 +940,7 @@ function BtnSecondary({
       color: C.cream,
       cursor: "pointer",
       fontFamily: "inherit",
+      width: full ? "100%" : "auto",
       boxShadow: "0 2px 8px rgba(0,0,0,.18)"
     }
   }, label);
@@ -947,6 +1077,97 @@ function LoadingScreen({
       marginTop: 8
     }
   }, msg || "Chargement…")));
+}
+// ─── BANDEAUX ────────────────────────────────────────────────
+// Les alertes du navigateur arrêtaient l'application en pleine action : sur un
+// téléphone, un appel en cours disparaissait derrière une boîte grise. Les
+// messages s'affichent maintenant par-dessus l'écran, sans rien interrompre.
+//
+// Un bus minuscule plutôt qu'un contexte React : n'importe quel module peut
+// signaler quelque chose sans qu'on fasse descendre une fonction de props en
+// props à travers vingt composants.
+const Signal = {
+  _abonnes: [],
+  emettre(type, texte) {
+    Signal._abonnes.forEach(f => {
+      try { f(type, texte); } catch (e) {}
+    });
+  },
+  abonner(f) {
+    Signal._abonnes.push(f);
+    return () => { Signal._abonnes = Signal._abonnes.filter(x => x !== f); };
+  }
+};
+
+const signalerErreur = e => Signal.emettre("erreur", (e && e.message) || String(e || "Une erreur est survenue"));
+const signalerSucces = t => Signal.emettre("succes", t);
+const signalerInfo = t => Signal.emettre("info", t);
+
+const APPARENCE_BANDEAU = {
+  succes: { fond: "rgba(76,175,125,.16)", bord: "rgba(76,175,125,.5)", teinte: "#4caf7d", icone: "✅" },
+  erreur: { fond: "rgba(224,90,90,.16)", bord: "rgba(224,90,90,.5)", teinte: "#e05a5a", icone: "⚠️" },
+  info:   { fond: "rgba(212,175,55,.14)", bord: "rgba(212,175,55,.45)", teinte: "#d4af37", icone: "ℹ️" }
+};
+
+function PileBandeaux() {
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => Signal.abonner((type, texte) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setMessages(m => [...m.slice(-2), { id, type, texte }]);
+    // Une réussite se lit au passage et s'efface seule. Une erreur reste :
+    // elle demande une décision, pas un coup d'œil.
+    if (type !== "erreur") {
+      setTimeout(() => setMessages(m => m.filter(x => x.id !== id)), 5000);
+    }
+  }), []);
+
+  if (!messages.length) return null;
+
+  return h("div", {
+    style: {
+      position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)",
+      zIndex: 9000, width: "calc(100% - 24px)", maxWidth: 440,
+      display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none"
+    }
+  }, messages.map(m => {
+    const a = APPARENCE_BANDEAU[m.type] || APPARENCE_BANDEAU.info;
+    return h("div", {
+      key: m.id,
+      className: "fx-fade-slide-up",
+      onClick: () => setMessages(x => x.filter(y => y.id !== m.id)),
+      style: {
+        pointerEvents: "auto", cursor: "pointer",
+        background: a.fond, border: `1px solid ${a.bord}`, borderRadius: 12,
+        padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10,
+        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+        boxShadow: "0 8px 24px rgba(0,0,0,.35)"
+      }
+    },
+      h("span", { style: { fontSize: 16, lineHeight: "20px" } }, a.icone),
+      h("div", { style: { flex: 1, fontSize: 14, lineHeight: 1.45, color: C.cream, fontWeight: 600 } }, m.texte),
+      h("span", { style: { color: a.teinte, fontSize: 18, lineHeight: "20px", fontWeight: 700 } }, "×"));
+  }));
+}
+
+// Barre discrète signalant que l'application travaille sans réseau, et combien
+// d'appels attendent de partir.
+function BandeauHorsLigne({ enLigne, enAttente }) {
+  if (enLigne && !enAttente) return null;
+  const texte = !enLigne
+    ? (enAttente
+        ? `Hors ligne — ${enAttente} appel${enAttente > 1 ? "s" : ""} en attente d'envoi`
+        : "Hors ligne — vos saisies sont gardées sur l'appareil")
+    : `Envoi en attente — ${enAttente} appel${enAttente > 1 ? "s" : ""} à transmettre`;
+  return h("div", {
+    style: {
+      background: enLigne ? "rgba(212,175,55,.12)" : "rgba(224,150,60,.14)",
+      border: `1px solid ${enLigne ? "rgba(212,175,55,.35)" : "rgba(224,150,60,.4)"}`,
+      borderRadius: 10, padding: "9px 12px", marginBottom: 12,
+      fontSize: 13, fontWeight: 600, color: C.cream,
+      display: "flex", alignItems: "center", gap: 8
+    }
+  }, h("span", null, enLigne ? "📤" : "📡"), h("span", null, texte));
 }
 // ─── CONNEXION ───────────────────────────────────────────────
 function LoginScreen({
@@ -1756,7 +1977,7 @@ function ModuleEleves({
         setSel(null);
       }
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
   };
   const handleToggle = async () => {
@@ -1768,7 +1989,7 @@ function ModuleEleves({
         actif: nextActif
       });
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
   };
   if (vue === "form") return /*#__PURE__*/React.createElement(FormulaireEleve, {
@@ -2058,7 +2279,10 @@ function ModuleAppel({
   eleves,
   groupes,
   appels,
+  comptesRendus,
+  monProfilId,
   onSaveAppel,
+  onSaveComptesRendus,
   onSaveGroupe,
   isAdmin,
   profs,
@@ -2071,10 +2295,38 @@ function ModuleAppel({
   const [onglet, setOnglet] = useState("appel");
   const [grpForm, setGrpForm] = useState(null);
   const [enregistrement, setEnregistrement] = useState(false);
+  const [travaille, setTravaille] = useState("");
+  const [difficultes, setDifficultes] = useState("");
+  const [devoirs, setDevoirs] = useState("");
+  const [saveCR, setSaveCR] = useState(false);
+  const [enAttente, setEnAttente] = useState(fileAppels.lire().length);
+  const [videsOuverts, setVidesOuverts] = useState(false);
+  const enLigne = useEnLigne();
   const elevesMap = {};
   eleves.forEach(e => {
     elevesMap[e.id] = e;
   });
+
+  // Le brouillon est écrit à chaque geste : si l'onglet se ferme ou si le réseau
+  // tombe, la saisie est toujours là au retour.
+  useEffect(() => {
+    if (grp && etape === "appel" && Object.keys(pres).length) {
+      Local.ecrire(cleBrouillonAppel(grp.id, date), pres);
+    }
+  }, [pres, grp, date, etape]);
+
+  // Au retour de la connexion, ce qui attendait part tout seul.
+  useEffect(() => {
+    if (!enLigne) return;
+    let vivant = true;
+    (async () => {
+      const { rejoues, restants } = await rejouerFileAppels(onSaveAppel);
+      if (!vivant) return;
+      setEnAttente(restants);
+      if (rejoues) signalerSucces(`${rejoues} appel${rejoues > 1 ? "s" : ""} enregistré${rejoues > 1 ? "s" : ""} au retour du réseau.`);
+    })();
+    return () => { vivant = false; };
+  }, [enLigne]);
   if (grpForm !== null) {
     return /*#__PURE__*/React.createElement(FormulaireGroupe, {
       initial: grpForm.id ? grpForm : null,
@@ -2084,53 +2336,59 @@ function ModuleAppel({
           await onSaveGroupe(f);
           setGrpForm(null);
         } catch (e) {
-          alert("Erreur : " + e.message);
+          signalerErreur(e);
         }
       },
       onCancel: () => setGrpForm(null)
     });
   }
+  // Un appel laissé en plan vaut mieux qu'une liste repartie de zéro : le
+  // brouillon local l'emporte sur ce qu'a renvoyé le serveur.
+  const etatPour = (g, d) => {
+    const brouillon = Local.lire(cleBrouillonAppel(g.id, d), null);
+    if (brouillon && Object.keys(brouillon).length) return { pres: brouillon, repris: !appels[`ap:${g.id}:${d}`] };
+    const ex = appels[`ap:${g.id}:${d}`];
+    if (ex) return { pres: ex, repris: false };
+    const p = {};
+    (g.eids || []).forEach(id => {
+      p[id] = "present";
+    });
+    return { pres: p, repris: false };
+  };
   const ouvrir = g => {
     setGrp(g);
-    const ex = appels[`ap:${g.id}:${date}`];
-    if (ex) {
-      setPres(ex);
-    } else {
-      const p = {};
-      (g.eids || []).forEach(id => {
-        p[id] = "present";
-      });
-      setPres(p);
-    }
+    const { pres: p, repris } = etatPour(g, date);
+    setPres(p);
+    if (repris) signalerInfo("Appel repris là où vous l'aviez laissé.");
     setEtape("appel");
   };
   const changerDate = d => {
     setDate(d);
     if (!grp) return;
-    const ex = appels[`ap:${grp.id}:${d}`];
-    if (ex) {
-      setPres(ex);
-    } else {
-      const p = {};
-      (grp.eids || []).forEach(id => {
-        p[id] = "present";
-      });
-      setPres(p);
-    }
+    setPres(etatPour(grp, d).pres);
   };
   const enregistrer = async () => {
     setEnregistrement(true);
     try {
-      await onSaveAppel(grp.id, date, pres);
+      const { enAttente: differe } = await envoyerAppel(onSaveAppel, grp.id, date, pres);
+      setEnAttente(fileAppels.lire().length);
+      if (differe) signalerInfo("Pas de réseau : l'appel est gardé sur l'appareil et partira tout seul.");
+      setTravaille("");
+      setDifficultes("");
+      setDevoirs("");
       setEtape("confirme");
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setEnregistrement(false);
   };
   const nbP = Object.values(pres).filter(s => s === "present").length;
   const nbAJ = Object.values(pres).filter(s => s === "absent_j").length;
   const nbAN = Object.values(pres).filter(s => s === "absent_nj").length;
+  // Un groupe sans inscrit est une place tenue pour plus tard, pas une séance à
+  // pointer. Il quitte la liste principale sans disparaître de l'application.
+  const groupesTenus = groupes.filter(g => (g.eids || []).length > 0);
+  const groupesVides = groupes.filter(g => (g.eids || []).length === 0);
   if (etape === "groupes") return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(212,175,55,.08)",
@@ -2194,7 +2452,7 @@ function ModuleAppel({
       flexDirection: "column",
       gap: 10
     }
-  }, groupes.map(g => {
+  }, groupesTenus.map(g => {
     const fait = !!appels[`ap:${g.id}:${date}`];
     return /*#__PURE__*/React.createElement("div", {
       key: g.id,
@@ -2268,7 +2526,25 @@ function ModuleAppel({
         fontFamily: "inherit"
       }
     }, "✏️"));
-  }), groupes.length === 0 && isAdmin && /*#__PURE__*/React.createElement("div", {
+  }), groupesVides.length > 0 && h("div", { style: { marginTop: 14 } },
+    h("button", {
+      onClick: () => setVidesOuverts(v => !v),
+      style: { background: "none", border: "none", color: C.gray, cursor: "pointer", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", padding: "6px 0" }
+    }, videsOuverts ? "▾ " : "▸ ", groupesVides.length, " groupe", groupesVides.length > 1 ? "s" : "", " sans élève inscrit"),
+    videsOuverts && h("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 8 } },
+      groupesVides.map(g => h("div", { key: g.id, style: { display: "flex", gap: 8 } },
+        h("button", {
+          onClick: () => ouvrir(g),
+          style: { flex: 1, background: "rgba(255,255,255,.02)", border: "1px dashed rgba(255,255,255,.12)", borderRadius: 12, padding: "12px 14px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }
+        },
+          h("div", { style: { fontSize: 14, fontWeight: 700, color: C.gray, fontFamily: FD } },
+            g.nom, h("span", { style: { fontSize: 10.5, fontWeight: 700, color: "rgba(212,175,55,.6)", marginLeft: 8 } }, g.matiere)),
+          h("div", { style: { fontSize: 11.5, color: "rgba(255,255,255,.3)", marginTop: 2 } }, horaireLabel(g), " • aucun inscrit")),
+        isAdmin && h("button", {
+          onClick: () => setGrpForm(g),
+          style: { background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 12, padding: "0 13px", color: "rgba(212,175,55,.6)", cursor: "pointer", fontSize: 14, fontFamily: "inherit" }
+        }, "✏️"))))),
+  groupes.length === 0 && isAdmin && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       padding: "30px 0",
@@ -2303,125 +2579,137 @@ function ModuleAppel({
       fontSize: 13
     }
   }, "Aucune classe ne vous a été assignée pour l'instant.", /*#__PURE__*/React.createElement("br", null), "Contactez l'administrateur."))));
-  if (etape === "confirme") return /*#__PURE__*/React.createElement("div", {
-    className: "fx-fade-slide-up",
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      minHeight: "50vh",
-      textAlign: "center",
-      padding: "0 20px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "fx-pop-in",
-    style: {
-      width: 80,
-      height: 80,
-      borderRadius: "50%",
-      background: "rgba(76,175,125,.15)",
-      border: `3px solid ${C.green}`,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 40,
-      marginBottom: 20
-    }
-  }, "✅"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 24,
-      fontWeight: 800,
-      color: C.cream,
-      fontFamily: FD,
-      marginBottom: 6
-    }
-  }, "Appel enregistré !"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 14,
-      color: C.gray,
-      marginBottom: 24
-    }
-  }, grp.nom, " • ", new Date(date).toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long"
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 24,
-      marginBottom: 28
-    }
-  }, nbP > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 32,
-      fontWeight: 800,
-      color: C.green,
-      fontFamily: FD
-    }
-  }, nbP), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: C.gray
-    }
-  }, "✅ Présents")), nbAJ > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 32,
-      fontWeight: 800,
-      color: C.orange,
-      fontFamily: FD
-    }
-  }, nbAJ), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: C.gray
-    }
-  }, "📋 Justifiés")), nbAN > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 32,
-      fontWeight: 800,
-      color: C.red,
-      fontFamily: FD
-    }
-  }, nbAN), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: C.gray
-    }
-  }, "❌ Absents"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 10,
-      width: "100%",
-      maxWidth: 280
-    }
-  }, /*#__PURE__*/React.createElement(BtnSecondary, {
-    label: "✏️ Corriger",
-    onClick: () => setEtape("appel")
-  }), onAllerSuivi && /*#__PURE__*/React.createElement(BtnPrimary, {
-    label: "📝 Rédiger le compte-rendu",
-    onClick: onAllerSuivi,
-    full: true
-  }), /*#__PURE__*/React.createElement(BtnSecondary, {
-    label: "← Retour aux groupes",
-    onClick: () => {
+  if (etape === "confirme") {
+    const presentsIds = (grp.eids || []).filter(id => pres[id] === "present");
+    const dejaEcrits = (comptesRendus || []).filter(c => c.groupe_id === grp.id && c.date === date).length;
+    // Les notions déjà saisies pour ce groupe deviennent des raccourcis : un chapitre
+    // s'étale sur plusieurs séances, le retaper chaque fois est une corvée inutile.
+    const suggestions = [...new Set((comptesRendus || [])
+      .filter(c => c.groupe_id === grp.id)
+      .flatMap(c => splitNotions(c.notions)))].slice(0, 6);
+    const ajouterNotion = t => setTravaille(v => {
+      const deja = splitNotions(v).some(x => x.toLowerCase() === t.toLowerCase());
+      return deja ? v : (v.trim() ? `${v.trim()}, ${t}` : t);
+    });
+    const finir = () => {
       setEtape("groupes");
       setGrp(null);
-    },
-    full: true
-  })));
+      setTravaille("");
+      setDifficultes("");
+      setDevoirs("");
+    };
+    const enregistrerCR = async () => {
+      if (!travaille.trim() && !difficultes.trim() && !devoirs.trim()) {
+        signalerInfo("Écrivez au moins ce qui a été travaillé.");
+        return;
+      }
+      setSaveCR(true);
+      try {
+        const parEleve = {};
+        presentsIds.forEach(id => {
+          parEleve[id] = {
+            notions: travaille.trim(),
+            difficultes: difficultes.trim(),
+            progres: "",
+            devoirs: devoirs.trim(),
+            niveau_seance: null
+          };
+        });
+        await onSaveComptesRendus(grp.id, date, parEleve, monProfilId);
+        signalerSucces("Compte rendu enregistré — il alimentera le bilan aux parents.");
+        finir();
+      } catch (e) {
+        signalerErreur(e);
+      }
+      setSaveCR(false);
+    };
+
+    return h("div", { className: "fx-fade-slide-up" },
+      // L'appel est fait : on le dit en une ligne et on passe à la suite.
+      h("div", {
+        style: {
+          background: enAttente ? "rgba(224,150,60,.12)" : "rgba(76,175,125,.1)",
+          border: `1px solid ${enAttente ? "rgba(224,150,60,.4)" : "rgba(76,175,125,.35)"}`,
+          borderRadius: 12, padding: "12px 14px", marginBottom: 18,
+          display: "flex", alignItems: "center", gap: 10
+        }
+      },
+        h("span", { style: { fontSize: 20 } }, enAttente ? "📡" : "✅"),
+        h("div", { style: { flex: 1 } },
+          h("div", { style: { fontSize: 14, fontWeight: 800, color: C.cream, fontFamily: FD } },
+            enAttente ? "Appel gardé sur l'appareil" : "Appel enregistré"),
+          h("div", { style: { fontSize: 12, color: C.gray, marginTop: 2 } },
+            `${grp.nom} • ${new Date(date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} • `,
+            h("span", { style: { color: C.green, fontWeight: 700 } }, `${nbP} présent${nbP > 1 ? "s" : ""}`),
+            nbAJ > 0 ? h("span", { style: { color: C.orange } }, ` • ${nbAJ} justifié${nbAJ > 1 ? "s" : ""}`) : null,
+            nbAN > 0 ? h("span", { style: { color: C.red } }, ` • ${nbAN} absent${nbAN > 1 ? "s" : ""}`) : null)),
+        h("button", {
+          onClick: () => setEtape("appel"),
+          style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap" }
+        }, "✏️ Corriger")),
+
+      presentsIds.length === 0
+        ? h("div", { style: { textAlign: "center", padding: "20px 0 28px", color: C.gray, fontSize: 13 } },
+            "Personne n'était présent : il n'y a pas de compte rendu à écrire.")
+        : h("div", null,
+            h("div", { style: { fontSize: 20, fontWeight: 800, color: C.cream, fontFamily: FD, marginBottom: 4 } },
+              "Qu'avez-vous travaillé ?"),
+            h("div", { style: { fontSize: 13, color: C.gray, marginBottom: 16, lineHeight: 1.5 } },
+              "Deux lignes suffisent. Elles valent pour les ", presentsIds.length, " élève",
+              presentsIds.length > 1 ? "s" : "", " présent", presentsIds.length > 1 ? "s" : "",
+              " et nourrissent le bilan envoyé aux parents."),
+
+            dejaEcrits > 0 && h("div", {
+              style: { background: "rgba(212,175,55,.1)", border: "1px solid rgba(212,175,55,.3)", borderRadius: 10, padding: "9px 12px", marginBottom: 14, fontSize: 12.5, color: C.cream }
+            }, `📝 Un compte rendu existe déjà pour cette séance. L'enregistrer à nouveau le remplacera.`),
+
+            suggestions.length > 0 && h("div", { style: { marginBottom: 12 } },
+              h("div", { style: { fontSize: 11, color: C.gray, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 700 } }, "Déjà vu avec ce groupe"),
+              h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
+                suggestions.map(s => h("button", {
+                  key: s,
+                  onClick: () => ajouterNotion(s),
+                  style: { background: "rgba(212,175,55,.1)", border: "1px solid rgba(212,175,55,.3)", borderRadius: 16, padding: "5px 11px", color: C.gold, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }
+                }, "+ ", s)))),
+
+            h(InputArea, {
+              label: "Travaillé en séance",
+              value: travaille,
+              onChange: setTravaille,
+              placeholder: "Théorème de Pythagore, exercices 12 à 18…"
+            }),
+            h(InputArea, {
+              label: "Difficultés rencontrées (facultatif)",
+              value: difficultes,
+              onChange: setDifficultes,
+              placeholder: "Confusion entre hypoténuse et côté adjacent…"
+            }),
+            h(InputText, {
+              label: "Devoirs pour la prochaine fois (facultatif)",
+              value: devoirs,
+              onChange: setDevoirs,
+              placeholder: "Exercices 20 et 21 page 54"
+            }),
+
+            h("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginTop: 4 } },
+              h(BtnPrimary, {
+                label: saveCR ? "Enregistrement…" : "📝 Enregistrer le compte rendu",
+                onClick: enregistrerCR,
+                full: true,
+                disabled: saveCR
+              }),
+              onAllerSuivi && h("button", {
+                onClick: onAllerSuivi,
+                style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", padding: "4px 0" }
+              }, "Détailler élève par élève →"))),
+
+      h("div", { style: { marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.08)" } },
+        h(BtnSecondary, {
+          label: presentsIds.length === 0 ? "← Retour aux groupes" : "Passer pour cette fois",
+          onClick: finir,
+          full: true
+        })));
+  }
   const histo = Object.entries(appels).filter(([k]) => k.startsWith(`ap:${grp.id}:`)).map(([k, v]) => ({
     date: k.split(":")[2],
     pres: v
@@ -3112,7 +3400,7 @@ function VueImpression({
 
   const emettre = async () => {
     if (manquants.length) {
-      alert("Complétez d'abord vos informations légales dans l'onglet Réglages :\n\n· " + manquants.join("\n· "));
+      signalerErreur({ message: "Complétez d'abord vos informations légales dans Réglages : " + manquants.join(", ") });
       return;
     }
     if (!confirm(`Émettre définitivement cette facture de ${facture.montant}€ pour ${eleve.prenom} ?\n\nElle recevra un numéro et ne bougera plus, même si de nouvelles séances sont pointées.`)) return;
@@ -3120,7 +3408,7 @@ function VueImpression({
     try {
       await onEmettre(facture.id);
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setEmission(false);
   };
@@ -3290,7 +3578,7 @@ function ModuleFacturation({
       setModal(null);
       showToast(data.statut === "paye" ? "🎉 Facture payée !" : "Facture enregistrée ✓");
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
   };
   // Renvoie true si la suppression a bien eu lieu (permet d'attendre la confirmation
@@ -3304,7 +3592,7 @@ function ModuleFacturation({
       showToast("Facture supprimée ✓");
       ok = true;
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSuppression(false);
     return ok;
@@ -3321,7 +3609,7 @@ function ModuleFacturation({
       showToast("Facture en cours supprimée ✓");
       ok = true;
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSuppression(false);
     return ok;
@@ -4371,7 +4659,7 @@ function OngletEntreprise({ parametres, onSave }) {
       setToast("Réglages enregistrés ✓");
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSaving(false);
   };
@@ -4519,7 +4807,7 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
         "application/json"
       );
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setEnCours(false);
   };
@@ -4806,7 +5094,7 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
       await onSave(grp.id, date, complet, monProfilId);
       setEtape("confirme");
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSaving(false);
   };
@@ -5437,7 +5725,7 @@ function App() {
       fontFamily: FD,
       color: C.cream
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(PileBandeaux, null), /*#__PURE__*/React.createElement("div", {
     style: {
       background: `linear-gradient(135deg,${C.navyM},${C.navyL})`,
       borderBottom: "1px solid rgba(212,175,55,.2)",
@@ -5504,7 +5792,10 @@ function App() {
     eleves: eleves,
     groupes: groupes,
     appels: appels,
+    comptesRendus: comptesRendus,
+    monProfilId: monProfil?.id || null,
     onSaveAppel: handleSaveAppel,
+    onSaveComptesRendus: handleSaveComptesRendus,
     onSaveGroupe: handleSaveGroupe,
     isAdmin: isAdmin,
     profs: profs,

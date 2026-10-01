@@ -22,11 +22,35 @@ l'ordre de `src/ordre.json` entre les deux moitiés de la coquille HTML
 src/app/00-supabase.js      connexion, clé anon
 src/app/01-couleurs.js      charte : bleu nuit, or, crème
 src/app/03-api-supabase.js  toutes les lectures et écritures en base
-src/app/15-module-appel.js  feuille d'appel
+src/app/04b-reseau.js       brouillons locaux, file des appels non transmis
+src/app/07b-bandeaux.js     messages à l'écran, sans bloquer l'application
+src/app/15-module-appel.js  feuille d'appel et compte rendu de séance
 src/app/18-module-facturation.js
 src/app/20-app.js           navigation, rôles, chargement des données
 public/                     manifest, service worker, icônes
 ```
+
+## L'appel, écran central
+
+Tout le reste en découle : la facturation compte les séances pointées, les bilans
+aux parents reprennent les comptes rendus. Trois partis pris le gouvernent.
+
+**Le compte rendu se demande sur place.** Il a d'abord vécu dans un onglet séparé.
+Résultat après un mois d'exploitation : zéro compte rendu écrit, alors que c'était
+la fonction la plus demandée. Un professeur qui finit à 20 h range sa salle et
+part ; il ne rouvre pas un onglet pour y resélectionner un groupe et une date. La
+question se pose donc sur l'écran qui suit l'appel, et vaut pour tous les présents
+d'un coup. La saisie élève par élève reste dans l'onglet Suivi pour qui veut nuancer.
+
+**La saisie survit à la coupure.** Une salle de cours n'est pas un bureau. Chaque
+geste est écrit dans le navigateur (`04b-reseau.js`) ; un envoi qui échoue pour
+cause de réseau rejoint une file et repart tout seul au retour de la connexion. Un
+refus du serveur, lui, remonte à l'utilisateur au lieu d'être rejoué en boucle —
+la distinction est faite par `estPanneReseau`.
+
+**Rien n'arrête l'écran.** Les messages passent par des bandeaux (`07b-bandeaux.js`),
+jamais par `alert()`, qui recouvrait tout et figeait un appel en cours. Seules les
+suppressions irréversibles gardent une confirmation bloquante, délibérément.
 
 ## Construire et vérifier
 
@@ -64,3 +88,17 @@ faite pour ça. La sécurité repose entièrement sur les politiques RLS en base
 l'administrateur voit tout, un professeur ne voit que ses groupes, un parent que
 ses enfants. **Toute nouvelle table doit avoir ses politiques RLS avant d'être
 utilisée par l'application.**
+
+Les fonctions `SECURITY DEFINER` s'exécutent avec les droits de leur propriétaire :
+leur `search_path` est figé (`public, pg_temp`) pour qu'un schéma interposé ne
+puisse pas détourner ce qu'elles croient appeler. **Toute nouvelle fonction de ce
+type doit l'être aussi** — `get_advisors` de Supabase le signale sinon.
+
+## Volumétrie
+
+Le chargement initial est borné à **douze mois glissants** pour les cours, les
+présences et les comptes rendus. Au-delà, les factures sont émises et figées, les
+bilans envoyés : rien de ce que montrent les écrans ne remonte plus loin. Sans
+cette borne, l'application téléchargeait tout l'historique à chaque ouverture —
+sans effet à vingt élèves, plusieurs milliers de lignes après quelques années, en
+4G, avant d'afficher le premier écran.

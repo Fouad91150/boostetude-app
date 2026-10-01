@@ -39,7 +39,7 @@ function ModuleEleves({
         setSel(null);
       }
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
   };
   const handleToggle = async () => {
@@ -51,7 +51,7 @@ function ModuleEleves({
         actif: nextActif
       });
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
   };
   if (vue === "form") return /*#__PURE__*/React.createElement(FormulaireEleve, {

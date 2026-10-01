@@ -36,7 +36,7 @@ function VueImpression({
 
   const emettre = async () => {
     if (manquants.length) {
-      alert("Complétez d'abord vos informations légales dans l'onglet Réglages :\n\n· " + manquants.join("\n· "));
+      signalerErreur({ message: "Complétez d'abord vos informations légales dans Réglages : " + manquants.join(", ") });
       return;
     }
     if (!confirm(`Émettre définitivement cette facture de ${facture.montant}€ pour ${eleve.prenom} ?\n\nElle recevra un numéro et ne bougera plus, même si de nouvelles séances sont pointées.`)) return;
@@ -44,7 +44,7 @@ function VueImpression({
     try {
       await onEmettre(facture.id);
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setEmission(false);
   };

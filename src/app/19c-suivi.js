@@ -229,7 +229,7 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
       await onSave(grp.id, date, complet, monProfilId);
       setEtape("confirme");
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSaving(false);
   };

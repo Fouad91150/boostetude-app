@@ -325,7 +325,7 @@ function App() {
       fontFamily: FD,
       color: C.cream
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(PileBandeaux, null), /*#__PURE__*/React.createElement("div", {
     style: {
       background: `linear-gradient(135deg,${C.navyM},${C.navyL})`,
       borderBottom: "1px solid rgba(212,175,55,.2)",
@@ -392,7 +392,10 @@ function App() {
     eleves: eleves,
     groupes: groupes,
     appels: appels,
+    comptesRendus: comptesRendus,
+    monProfilId: monProfil?.id || null,
     onSaveAppel: handleSaveAppel,
+    onSaveComptesRendus: handleSaveComptesRendus,
     onSaveGroupe: handleSaveGroupe,
     isAdmin: isAdmin,
     profs: profs,

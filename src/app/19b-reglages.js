@@ -61,7 +61,7 @@ function OngletEntreprise({ parametres, onSave }) {
       setToast("Réglages enregistrés ✓");
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setSaving(false);
   };
@@ -209,7 +209,7 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
         "application/json"
       );
     } catch (e) {
-      alert("Erreur : " + e.message);
+      signalerErreur(e);
     }
     setEnCours(false);
   };
