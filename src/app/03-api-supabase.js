@@ -317,8 +317,13 @@ Object.assign(api, {
     return data;
   },
   async saveParametres(form) {
+    // Le seuil arrive du formulaire sous forme de texte, parfois vide si l'on a
+    // tout effacé avant de retaper. La base attend un entier entre 1 et 52.
+    const seuilBrut = parseInt(form.seuil_facturation, 10);
+    const seuil = Number.isFinite(seuilBrut) ? Math.min(52, Math.max(1, seuilBrut)) : SEUIL_FACTURATION_DEFAUT;
     const { error } = await sb.from("parametres_entreprise").update({
       ...form,
+      seuil_facturation: seuil,
       maj_le: new Date().toISOString()
     }).eq("id", true);
     if (error) throw error;

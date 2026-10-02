@@ -66,9 +66,21 @@ function VueImpression({
             style: { background: "rgba(224,85,85,.12)", border: "1px solid rgba(224,85,85,.35)", borderRadius: 10, padding: "9px 14px", color: C.red, cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }
           }, "🗑 Supprimer"),
           h("button", {
-            onClick: () => window.print(),
+            onClick: () => {
+              try {
+                telechargerBlob(facturePDFBlob(facture, eleve, p), nomFichierFacture(facture, eleve));
+                signalerSucces("PDF téléchargé.");
+              } catch (e) {
+                signalerErreur(e);
+              }
+            },
             style: { background: `linear-gradient(135deg,${C.gold},${C.goldD})`, border: "none", borderRadius: 10, padding: "9px 16px", color: C.navy, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }
-          }, "🖨 PDF")
+          }, "⤓ PDF"),
+          h("button", {
+            onClick: () => window.print(),
+            title: "Imprimer",
+            style: { background: "rgba(255,255,255,.08)", border: "none", borderRadius: 10, padding: "9px 12px", color: C.gray, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }
+          }, "🖨")
         )
       ),
 
@@ -86,7 +98,10 @@ function VueImpression({
       emise && h("div", { className: "sans-impression", style: { background: "rgba(76,175,125,.1)", border: "1px solid rgba(76,175,125,.3)", borderRadius: 12, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: C.green, lineHeight: 1.6 } },
         `Facture émise le ${fmtDateLongue(facture.dateEmission)} sous le numéro ${facture.numero}. Son montant est figé.`),
 
-      h(PanneauEnvoi, { eleve, mois: periodeLabel, nb: facture.nbSeances, montant: facture.montant, dates, type: "facture" }),
+      h(PanneauEnvoi, {
+        eleve, mois: facture.numero || periodeLabel, nb: facture.nbSeances, montant: facture.montant, dates,
+        type: "facture", facture, parametres: p, seuil: p.seuil_facturation
+      }),
 
       // ── La facture elle-même ───────────────────────────────
       h("div", { className: "facture-papier", style: { background: "#fff", borderRadius: 16, padding: "28px 24px", color: "#1a1a1a", fontFamily: "Georgia,serif", marginTop: 14, boxShadow: "0 8px 40px rgba(0,0,0,.4)" } },

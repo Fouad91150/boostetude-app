@@ -78,3 +78,15 @@ const telWhatsApp = tel => {
   if (t.startsWith("0")) return "33" + t.slice(1);
   return t;
 };
+
+// Montant d'un document comptable : toujours deux décimales, virgule française.
+const euros = montant => {
+  const n = Number(montant);
+  return (Number.isFinite(n) ? n : 0).toFixed(2).replace(".", ",") + " €";
+};
+// Montant d'un message : « 75 € » si le compte est rond, « 74,50 € » sinon.
+const montantTxt = montant => {
+  const n = Number(montant);
+  if (!Number.isFinite(n)) return "0 €";
+  return (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(".", ",")) + " €";
+};

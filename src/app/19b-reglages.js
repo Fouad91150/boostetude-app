@@ -107,6 +107,17 @@ function OngletEntreprise({ parametres, onSave }) {
     ),
 
     h("div", { style: { borderTop: "1px solid rgba(212,175,55,.1)", paddingTop: 14 } },
+      h(Lbl, { text: "Rythme de facturation" }),
+      h(InputText, {
+        label: "Facturer toutes les … séances",
+        value: String(f.seuil_facturation == null ? SEUIL_FACTURATION_DEFAUT : f.seuil_facturation),
+        onChange: v => set("seuil_facturation", v.replace(/\D/g, "").slice(0, 2)),
+        placeholder: "3", type: "tel"
+      }),
+      h("div", { style: { fontSize: 11, color: C.gray, marginTop: -8, marginBottom: 14, lineHeight: 1.5 } },
+        "Au-delà de ce nombre de séances suivies, l'élève est signalé dans Facturation. " +
+        "Le chiffre apparaît aussi dans le message au parent : « envoyé toutes les " +
+        (f.seuil_facturation || SEUIL_FACTURATION_DEFAUT) + " séances »."),
       h(Lbl, { text: "Mentions de facturation" }),
       h(InputText, { label: "Préfixe des numéros", value: f.prefixe_facture || "", onChange: v => set("prefixe_facture", v), placeholder: "F" }),
       h("div", { style: { fontSize: 11, color: C.gray, marginTop: -8, marginBottom: 14 } },

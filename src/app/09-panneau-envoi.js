@@ -1,4 +1,16 @@
 // ─── PANNEAU ENVOI ────────────────────────────────────────────
+// Ce que le téléphone sait faire, et ce qu'il ne sait pas :
+//
+//  · Le PDF ne peut rejoindre une conversation que par le partage du système
+//    (menu « Partager »), qui dépose le fichier dans WhatsApp, un mail, Drive.
+//  · Un SMS ne transporte pas de pièce jointe — jamais, c'est le protocole. Le
+//    message SMS porte donc le montant et les modalités, pas la facture.
+//  · Les liens wa.me / sms: / mailto: ne portent que du texte, d'où deux gestes
+//    distincts : partager le fichier, puis envoyer le message (ou l'inverse).
+//
+// Rien n'est envoyé par l'application : tout part du téléphone de Fouad, depuis
+// son propre numéro. Aucun abonnement à un service d'envoi, aucune donnée confiée
+// à un tiers.
 function PanneauEnvoi({
   eleve,
   mois,
@@ -6,21 +18,41 @@ function PanneauEnvoi({
   montant,
   dates,
   type,
-  justifie
+  justifie,
+  facture,
+  parametres,
+  seuil
 }) {
-  // Pour une absence, l'aperçu s'ouvre par défaut : la formulation exacte doit être visible
-  // avant l'envoi, pas seulement accessible via l'œil 👁.
+  // Pour une absence, l'aperçu s'ouvre par défaut : la formulation exacte doit être
+  // visible avant l'envoi, pas seulement accessible via l'œil.
   const [apercu, setApercu] = useState(type === "absence" ? "email" : null);
   const [copie, setCopie] = useState(null);
+  const [envoiPDF, setEnvoiPDF] = useState(false);
+
   const isF = type === "facture";
   const isA = type === "absence";
   const accent = isF ? C.green : isA ? C.blue : C.orange;
   const bgBase = isF ? "rgba(76,175,125," : isA ? "rgba(74,158,221," : "rgba(224,144,48,";
-  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates) : isA ? makeAbsenceEmail(eleve, mois, justifie) : makeRappelEmail(eleve, mois, montant, dates);
-  const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant) : isA ? makeAbsenceSMS(eleve, mois, justifie) : makeRappelSMS(eleve, mois, montant);
+
+  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil)
+    : isA ? makeAbsenceEmail(eleve, mois, justifie)
+    : makeRappelEmail(eleve, mois, montant, dates);
+  const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant, seuil)
+    : isA ? makeAbsenceSMS(eleve, mois, justifie)
+    : makeRappelSMS(eleve, mois, montant);
+  // WhatsApp accepte un texte plus long et un balisage léger : on lui donne la
+  // version soignée plutôt que le SMS tronqué.
+  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil) : smsText;
+
   const tel = (eleve.tel || "").replace(/\s/g, "");
   const hrefEmail = `mailto:${eleve.email}?subject=${encodeURIComponent(emailData.sujet)}&body=${encodeURIComponent(emailData.corps)}`;
   const hrefSMS = `sms:${tel}?body=${encodeURIComponent(smsText)}`;
+  const hrefWA = `https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(waText)}`;
+
+  // Le PDF n'a de sens que pour une facture émise : un brouillon n'a pas de numéro
+  // et son montant bouge encore à chaque séance pointée.
+  const pdfPossible = isF && facture && facture.numero;
+
   const copier = (txt, key) => {
     const fait = () => {
       setCopie(key);
@@ -46,164 +78,115 @@ function PanneauEnvoi({
       fait();
     } catch (e) {}
   };
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: `${bgBase}.07)`,
-      border: `1px solid ${bgBase}.22)`,
-      borderRadius: 12,
-      padding: "12px",
-      marginTop: 8
+
+  const partagerPDF = async () => {
+    setEnvoiPDF(true);
+    try {
+      const r = await partagerFacturePDF(facture, eleve, parametres, waText);
+      if (r.telecharge) signalerInfo("PDF téléchargé. Votre appareil ne sait pas partager de fichier : joignez-le depuis WhatsApp ou votre messagerie.");
+      else if (r.partage) signalerSucces("Facture partagée.");
+    } catch (e) {
+      signalerErreur(e);
     }
-  }, /*#__PURE__*/React.createElement(Lbl, {
-    text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : "📨 Rappel paiement"
-  }), apercu && /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(0,0,0,.4)",
-      borderRadius: 8,
-      padding: "10px",
-      marginBottom: 8,
-      fontSize: 12,
-      color: C.cream,
-      lineHeight: 1.6,
-      whiteSpace: "pre-line",
-      border: "1px solid rgba(255,255,255,.08)"
+    setEnvoiPDF(false);
+  };
+
+  const telechargerPDF = () => {
+    try {
+      telechargerBlob(facturePDFBlob(facture, eleve, parametres), nomFichierFacture(facture, eleve));
+      signalerSucces("PDF téléchargé.");
+    } catch (e) {
+      signalerErreur(e);
     }
-  }, apercu === "email" && /*#__PURE__*/React.createElement("div", {
+  };
+
+  // Un canal = un lien pour agir, un œil pour relire, un bouton pour copier.
+  const canal = (cle, libelle, href, texte, couleur, fond) => h("div", {
+    key: cle,
+    style: { display: "flex", gap: 4, flex: "1 1 100%", minWidth: 0 }
+  },
+    h("a", {
+      href, target: "_blank", rel: "noopener noreferrer",
+      style: {
+        flex: 1, background: `${fond}.15)`, border: `1px solid ${fond}.4)`, borderRadius: 10,
+        padding: "10px 6px", color: couleur, textDecoration: "none", fontSize: 13,
+        fontWeight: 700, textAlign: "center", display: "block"
+      }
+    }, libelle),
+    h("button", {
+      onClick: () => setApercu(apercu === cle ? null : cle),
+      style: {
+        background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.1)",
+        borderRadius: 10, padding: "10px 8px", color: C.gray, cursor: "pointer",
+        fontSize: 11, fontWeight: 700, fontFamily: "inherit"
+      }
+    }, "👁"),
+    h("button", {
+      onClick: () => copier(texte, cle),
+      title: "Copier le message",
+      style: {
+        background: copie === cle ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.07)",
+        border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "10px 8px",
+        color: copie === cle ? C.green : C.gray, cursor: "pointer",
+        fontSize: 11, fontWeight: 700, fontFamily: "inherit"
+      }
+    }, copie === cle ? "✅" : "📋"));
+
+  const texteApercu = { email: emailData.corps, sms: smsText, wa: waText }[apercu];
+
+  return h("div", {
     style: {
-      fontSize: 11,
-      color: C.gold,
-      fontWeight: 700,
-      marginBottom: 6
+      background: `${bgBase}.07)`, border: `1px solid ${bgBase}.22)`,
+      borderRadius: 12, padding: 12, marginTop: 8
     }
-  }, "Objet : ", emailData.sujet), apercu === "sms" ? smsText : emailData.corps, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setApercu(null),
-    style: {
-      display: "block",
-      marginTop: 8,
-      background: "none",
-      border: "none",
-      color: C.gray,
-      cursor: "pointer",
-      fontSize: 12,
-      fontFamily: "inherit"
-    }
-  }, "✕ Fermer")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8
-    }
-  }, eleve.email && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 4,
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: hrefEmail,
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      flex: 1,
-      background: `${bgBase}.15)`,
-      border: `1px solid ${bgBase}.4)`,
-      borderRadius: 10,
-      padding: "10px 6px",
-      color: accent,
-      textDecoration: "none",
-      fontSize: 13,
-      fontWeight: 700,
-      textAlign: "center",
-      display: "block"
-    }
-  }, "✉️ Email"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setApercu(apercu === "email" ? null : "email"),
-    style: {
-      background: "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, "👁"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => copier(emailData.corps, "email"),
-    title: "Copier le message",
-    style: {
-      background: copie === "email" ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: copie === "email" ? C.green : C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, copie === "email" ? "✅" : "📋")), eleve.tel && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 4,
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: hrefSMS,
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      flex: 1,
-      background: "rgba(74,158,221,.15)",
-      border: "1px solid rgba(74,158,221,.4)",
-      borderRadius: 10,
-      padding: "10px 6px",
-      color: C.blue,
-      textDecoration: "none",
-      fontSize: 13,
-      fontWeight: 700,
-      textAlign: "center",
-      display: "block"
-    }
-  }, "📱 SMS"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setApercu(apercu === "sms" ? null : "sms"),
-    style: {
-      background: "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, "👁"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => copier(smsText, "sms"),
-    title: "Copier le message",
-    style: {
-      background: copie === "sms" ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: copie === "sms" ? C.green : C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, copie === "sms" ? "✅" : "📋")), !eleve.email && !eleve.tel && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: C.gray,
-      fontStyle: "italic"
-    }
-  }, "Ajoutez un email ou un téléphone parent pour envoyer.")), (eleve.email || eleve.tel) && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: C.gray,
-      marginTop: 6,
-      lineHeight: 1.5
-    }
-  }, "Sur ordinateur, ✉️/📱 n'ouvrent une appli que si une messagerie par défaut est configurée. Sinon utilisez 📋 pour copier le message et le coller dans votre mail ou SMS."));
+  },
+    h(Lbl, { text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : "📨 Rappel paiement" }),
+
+    // ── Le fichier : un geste à part, le seul qui emporte vraiment la facture ──
+    pdfPossible && h("div", { style: { display: "flex", gap: 6, marginBottom: 10 } },
+      h("button", {
+        onClick: partagerPDF,
+        disabled: envoiPDF,
+        style: {
+          flex: 1, background: `linear-gradient(135deg,${C.gold},${C.goldD})`, border: "none",
+          borderRadius: 10, padding: "11px 10px", color: C.navy, fontSize: 13.5, fontWeight: 800,
+          cursor: envoiPDF ? "wait" : "pointer", fontFamily: "inherit", opacity: envoiPDF ? 0.6 : 1
+        }
+      }, envoiPDF ? "Préparation…" : "📎 Partager la facture PDF"),
+      h("button", {
+        onClick: telechargerPDF,
+        title: "Télécharger le PDF",
+        style: {
+          background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.12)",
+          borderRadius: 10, padding: "11px 12px", color: C.gray, cursor: "pointer",
+          fontSize: 13, fontFamily: "inherit"
+        }
+      }, "⤓")),
+
+    apercu && h("div", {
+      style: {
+        background: "rgba(0,0,0,.4)", borderRadius: 8, padding: 10, marginBottom: 8,
+        fontSize: 12, color: C.cream, lineHeight: 1.6, whiteSpace: "pre-line",
+        border: "1px solid rgba(255,255,255,.08)"
+      }
+    },
+      apercu === "email" && h("div", { style: { fontSize: 11, color: C.gold, fontWeight: 700, marginBottom: 6 } },
+        "Objet : " + emailData.sujet),
+      texteApercu,
+      h("button", {
+        onClick: () => setApercu(null),
+        style: { display: "block", marginTop: 8, background: "none", border: "none", color: C.gray, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }
+      }, "✕ Fermer")),
+
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+      eleve.tel ? canal("wa", "💬 WhatsApp", hrefWA, waText, "#25d366", "rgba(37,211,102,") : null,
+      eleve.tel ? canal("sms", "📱 SMS", hrefSMS, smsText, C.blue, "rgba(74,158,221,") : null,
+      eleve.email ? canal("email", "✉️ Email", hrefEmail, emailData.corps, accent, bgBase) : null,
+      !eleve.email && !eleve.tel && h("div", { style: { fontSize: 12, color: C.gray, fontStyle: "italic" } },
+        "Ajoutez un email ou un téléphone parent pour envoyer.")),
+
+    (eleve.email || eleve.tel) && h("div", { style: { fontSize: 11, color: C.gray, marginTop: 8, lineHeight: 1.55 } },
+      pdfPossible
+        ? "Le SMS ne peut pas porter de pièce jointe. Pour envoyer vraiment le PDF, utilisez « Partager la facture PDF » puis choisissez WhatsApp ou votre messagerie — le message part avec le fichier."
+        : "Sur ordinateur, ces boutons n'ouvrent une application que si une messagerie par défaut est configurée. Sinon utilisez 📋 pour copier le message."));
 }

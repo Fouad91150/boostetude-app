@@ -25,6 +25,7 @@ src/app/03-api-supabase.js  toutes les lectures et écritures en base
 src/app/04b-reseau.js       brouillons locaux, file des appels non transmis
 src/app/07b-bandeaux.js     messages à l'écran, sans bloquer l'application
 src/app/15-module-appel.js  feuille d'appel et compte rendu de séance
+src/app/16b-facture-pdf.js  fabrique le PDF de la facture, sans dépendance
 src/app/18-module-facturation.js
 src/app/20-app.js           navigation, rôles, chargement des données
 public/                     manifest, service worker, icônes
@@ -93,6 +94,38 @@ Les fonctions `SECURITY DEFINER` s'exécutent avec les droits de leur propriéta
 leur `search_path` est figé (`public, pg_temp`) pour qu'un schéma interposé ne
 puisse pas détourner ce qu'elles croient appeler. **Toute nouvelle fonction de ce
 type doit l'être aussi** — `get_advisors` de Supabase le signale sinon.
+
+## Envoyer une facture
+
+Le PDF est **fabriqué à la main** (`16b-facture-pdf.js`) : une page A4, les polices
+de base, la table de références calculée en octets. Une bibliothèque comme jsPDF
+pèserait 350 Ko — plus que l'application entière — et mettrait un CDN sur le chemin
+d'un geste qui doit marcher depuis un téléphone, en bas de l'immeuble. Le fichier
+produit fait 5 Ko et son texte reste sélectionnable.
+
+Le texte du document est en **WinAnsi**, seul encodage que lisent les polices PDF
+de base ; le titre des métadonnées, lui, est en **UTF-16BE avec BOM**, sinon les
+accents y partent en charabia. Les deux conversions sont dans le module.
+
+Ce que le téléphone sait faire, et ce qu'il ne sait pas :
+
+| | Texte | Pièce jointe |
+|---|---|---|
+| Partage natif (`navigator.share`) | ✅ | ✅ **le seul chemin pour le PDF** |
+| WhatsApp par lien `wa.me` | ✅ | ❌ |
+| SMS | ✅ | ❌ jamais, c'est le protocole |
+| Mail par `mailto:` | ✅ | ❌ |
+
+D'où deux boutons distincts : **Partager la facture PDF** ouvre le menu du système,
+qui dépose le fichier dans WhatsApp ou un mail ; les boutons WhatsApp / SMS / Email
+n'envoient que le message. Rien ne part de l'application elle-même : tout transite
+par le téléphone de Fouad, depuis son propre numéro, sans service tiers ni
+abonnement.
+
+Le **rythme de facturation** (trois séances par défaut) se règle dans Réglages. Il
+sert à deux choses : signaler dans Facturation les élèves qui l'ont atteint, et
+annoncer au parent « message automatique envoyé toutes les N séances ». Rien n'est
+émis tout seul — c'est un signalement, la décision reste humaine.
 
 ## Volumétrie
 

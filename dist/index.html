@@ -61,8 +61,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "2.2.0";
-window.__APP_BUILD = "2026-10-01";
+<script>window.__APP_VERSION = "2.3.0";
+window.__APP_BUILD = "2026-10-02";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -479,8 +479,13 @@ Object.assign(api, {
     return data;
   },
   async saveParametres(form) {
+    // Le seuil arrive du formulaire sous forme de texte, parfois vide si l'on a
+    // tout effacé avant de retaper. La base attend un entier entre 1 et 52.
+    const seuilBrut = parseInt(form.seuil_facturation, 10);
+    const seuil = Number.isFinite(seuilBrut) ? Math.min(52, Math.max(1, seuilBrut)) : SEUIL_FACTURATION_DEFAUT;
     const { error } = await sb.from("parametres_entreprise").update({
       ...form,
+      seuil_facturation: seuil,
       maj_le: new Date().toISOString()
     }).eq("id", true);
     if (error) throw error;
@@ -623,6 +628,18 @@ const telWhatsApp = tel => {
   if (t.startsWith("00")) return t.slice(2);
   if (t.startsWith("0")) return "33" + t.slice(1);
   return t;
+};
+
+// Montant d'un document comptable : toujours deux décimales, virgule française.
+const euros = montant => {
+  const n = Number(montant);
+  return (Number.isFinite(n) ? n : 0).toFixed(2).replace(".", ",") + " €";
+};
+// Montant d'un message : « 75 € » si le compte est rond, « 74,50 € » sinon.
+const montantTxt = montant => {
+  const n = Number(montant);
+  if (!Number.isFinite(n)) return "0 €";
+  return (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(".", ",")) + " €";
 };
 // ─── RÉSEAU ET BROUILLONS LOCAUX ─────────────────────────────
 // Une salle de cours n'est pas un bureau : le wifi tombe, la 4G traverse mal le
@@ -799,16 +816,64 @@ const detailMatieresTxt = dates => {
   if (groupes.length < 2) return "";
   return "\n" + groupes.map(g => `- ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n");
 };
-const makeFactureEmail = (e, mois, nb, total, dates) => ({
+// Toutes les trois séances par défaut — le seuil se règle dans l'onglet Réglages.
+const SEUIL_FACTURATION_DEFAUT = 3;
+
+// Trois moyens acceptés. Pour un virement, le nom de l'enfant est indispensable :
+// sans lui, un virement arrive sans qu'on sache à qui le rattacher.
+const MOYENS_PAIEMENT_TEXTE = e =>
+  `Règlement au choix : espèces, chèque ou virement bancaire. ` +
+  `Pour un virement, merci d'indiquer « ${e.prenom} ${e.nom} » en référence.`;
+
+const mentionAutomatique = seuil =>
+  `Message automatique envoyé toutes les ${seuil || SEUIL_FACTURATION_DEFAUT} séances.`;
+
+const signatureBoost = "Fouad Elmkhanter — Boost'Étude";
+
+const makeFactureEmail = (e, mois, nb, total, dates, seuil) => ({
   sujet: `Facture ${mois} — ${e.prenom} ${e.nom} — Boost'Étude`,
-  corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\nSéances : ${nb} × 2h × ${e.th}€/h${detailMatieresTxt(dates)}\nTOTAL : ${total}€\nRèglement : ${e.mp}\n\nCordialement,\nBoost'Étude — M. El Mkhanter\nboostetude@gmail.com`
+  corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
+         `Séances : ${nb} × 2 h × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n` +
+         `TOTAL : ${montantTxt(total)}\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
+         `La facture détaillée est jointe en PDF.\n\n` +
+         `Cordialement,\n${signatureBoost}\nboostetude@gmail.com\n\n` +
+         `— ${mentionAutomatique(seuil)}`
 });
-const makeFactureSMS = (e, mois, nb, total) => `Boost'Étude - Facture ${mois} : bonjour ${e.parent}, facture de ${e.prenom} = ${nb}x2hx${e.th}€ = ${total}€. Merci !`;
+
+const makeFactureSMS = (e, mois, nb, total, seuil) =>
+  `Boost'Étude — Facture ${mois}\n` +
+  `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n` +
+  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}).\n` +
+  `${mentionAutomatique(seuil)}`;
+
+// WhatsApp accepte un balisage léger : *gras* et _italique_. Le PDF part à côté,
+// par le partage du téléphone — un message seul ne peut pas l'emporter.
+const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil) => {
+  const detail = groupParMatiere(dates || []);
+  const lignes = detail.length > 1
+    ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
+    : "";
+  return `*Boost'Étude — Facture ${mois}*\n\n` +
+         `Bonjour ${e.parent},\n\n` +
+         `Voici la facture de ${e.prenom} :\n` +
+         lignes +
+         `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n` +
+         `• *Total : ${montantTxt(total)}*\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
+         `La facture détaillée est jointe en PDF.\n\n` +
+         `_${mentionAutomatique(seuil)}_\n\n` +
+         `${signatureBoost}`;
+};
 const makeRappelEmail = (e, mois, total, dates) => ({
   sujet: `Rappel règlement ${mois} — ${e.prenom} ${e.nom}`,
-  corps: `Bonjour ${e.parent},\n\nRappel : le règlement de ${total}€ pour ${e.prenom} (${mois}) est en attente.${detailMatieresTxt(dates)}\n\nMerci de régler par ${e.mp.toLowerCase()}.\n\nBoost'Étude`
+  corps: `Bonjour ${e.parent},\n\nRappel : le règlement de ${montantTxt(total)} pour ${e.prenom} (${mois}) est en attente.${detailMatieresTxt(dates)}\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e)}\n\nMerci,\n${signatureBoost}`
 });
-const makeRappelSMS = (e, mois, total) => `Boost'Étude - Rappel ${mois} : bonjour ${e.parent}, règlement de ${total}€ pour ${e.prenom} en attente. Merci !`;
+const makeRappelSMS = (e, mois, total) =>
+  `Boost'Étude — Rappel ${mois}\n` +
+  `Bonjour, le règlement de ${montantTxt(total)} pour ${e.prenom} est en attente.\n` +
+  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}). Merci !`;
 const makeAbsenceEmail = (e, dateLabel, justifie) => ({
   sujet: `Absence de ${e.prenom} ${e.nom} — ${dateLabel} — Boost'Étude`,
   corps: justifie ? `Bonjour ${e.parent},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude — M. El Mkhanter\nboostetude@gmail.com` : `Bonjour ${e.parent},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude — M. El Mkhanter\nboostetude@gmail.com`
@@ -1244,6 +1309,18 @@ function LoginScreen({
   })));
 }
 // ─── PANNEAU ENVOI ────────────────────────────────────────────
+// Ce que le téléphone sait faire, et ce qu'il ne sait pas :
+//
+//  · Le PDF ne peut rejoindre une conversation que par le partage du système
+//    (menu « Partager »), qui dépose le fichier dans WhatsApp, un mail, Drive.
+//  · Un SMS ne transporte pas de pièce jointe — jamais, c'est le protocole. Le
+//    message SMS porte donc le montant et les modalités, pas la facture.
+//  · Les liens wa.me / sms: / mailto: ne portent que du texte, d'où deux gestes
+//    distincts : partager le fichier, puis envoyer le message (ou l'inverse).
+//
+// Rien n'est envoyé par l'application : tout part du téléphone de Fouad, depuis
+// son propre numéro. Aucun abonnement à un service d'envoi, aucune donnée confiée
+// à un tiers.
 function PanneauEnvoi({
   eleve,
   mois,
@@ -1251,21 +1328,41 @@ function PanneauEnvoi({
   montant,
   dates,
   type,
-  justifie
+  justifie,
+  facture,
+  parametres,
+  seuil
 }) {
-  // Pour une absence, l'aperçu s'ouvre par défaut : la formulation exacte doit être visible
-  // avant l'envoi, pas seulement accessible via l'œil 👁.
+  // Pour une absence, l'aperçu s'ouvre par défaut : la formulation exacte doit être
+  // visible avant l'envoi, pas seulement accessible via l'œil.
   const [apercu, setApercu] = useState(type === "absence" ? "email" : null);
   const [copie, setCopie] = useState(null);
+  const [envoiPDF, setEnvoiPDF] = useState(false);
+
   const isF = type === "facture";
   const isA = type === "absence";
   const accent = isF ? C.green : isA ? C.blue : C.orange;
   const bgBase = isF ? "rgba(76,175,125," : isA ? "rgba(74,158,221," : "rgba(224,144,48,";
-  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates) : isA ? makeAbsenceEmail(eleve, mois, justifie) : makeRappelEmail(eleve, mois, montant, dates);
-  const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant) : isA ? makeAbsenceSMS(eleve, mois, justifie) : makeRappelSMS(eleve, mois, montant);
+
+  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil)
+    : isA ? makeAbsenceEmail(eleve, mois, justifie)
+    : makeRappelEmail(eleve, mois, montant, dates);
+  const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant, seuil)
+    : isA ? makeAbsenceSMS(eleve, mois, justifie)
+    : makeRappelSMS(eleve, mois, montant);
+  // WhatsApp accepte un texte plus long et un balisage léger : on lui donne la
+  // version soignée plutôt que le SMS tronqué.
+  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil) : smsText;
+
   const tel = (eleve.tel || "").replace(/\s/g, "");
   const hrefEmail = `mailto:${eleve.email}?subject=${encodeURIComponent(emailData.sujet)}&body=${encodeURIComponent(emailData.corps)}`;
   const hrefSMS = `sms:${tel}?body=${encodeURIComponent(smsText)}`;
+  const hrefWA = `https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(waText)}`;
+
+  // Le PDF n'a de sens que pour une facture émise : un brouillon n'a pas de numéro
+  // et son montant bouge encore à chaque séance pointée.
+  const pdfPossible = isF && facture && facture.numero;
+
   const copier = (txt, key) => {
     const fait = () => {
       setCopie(key);
@@ -1291,166 +1388,117 @@ function PanneauEnvoi({
       fait();
     } catch (e) {}
   };
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: `${bgBase}.07)`,
-      border: `1px solid ${bgBase}.22)`,
-      borderRadius: 12,
-      padding: "12px",
-      marginTop: 8
+
+  const partagerPDF = async () => {
+    setEnvoiPDF(true);
+    try {
+      const r = await partagerFacturePDF(facture, eleve, parametres, waText);
+      if (r.telecharge) signalerInfo("PDF téléchargé. Votre appareil ne sait pas partager de fichier : joignez-le depuis WhatsApp ou votre messagerie.");
+      else if (r.partage) signalerSucces("Facture partagée.");
+    } catch (e) {
+      signalerErreur(e);
     }
-  }, /*#__PURE__*/React.createElement(Lbl, {
-    text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : "📨 Rappel paiement"
-  }), apercu && /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(0,0,0,.4)",
-      borderRadius: 8,
-      padding: "10px",
-      marginBottom: 8,
-      fontSize: 12,
-      color: C.cream,
-      lineHeight: 1.6,
-      whiteSpace: "pre-line",
-      border: "1px solid rgba(255,255,255,.08)"
+    setEnvoiPDF(false);
+  };
+
+  const telechargerPDF = () => {
+    try {
+      telechargerBlob(facturePDFBlob(facture, eleve, parametres), nomFichierFacture(facture, eleve));
+      signalerSucces("PDF téléchargé.");
+    } catch (e) {
+      signalerErreur(e);
     }
-  }, apercu === "email" && /*#__PURE__*/React.createElement("div", {
+  };
+
+  // Un canal = un lien pour agir, un œil pour relire, un bouton pour copier.
+  const canal = (cle, libelle, href, texte, couleur, fond) => h("div", {
+    key: cle,
+    style: { display: "flex", gap: 4, flex: "1 1 100%", minWidth: 0 }
+  },
+    h("a", {
+      href, target: "_blank", rel: "noopener noreferrer",
+      style: {
+        flex: 1, background: `${fond}.15)`, border: `1px solid ${fond}.4)`, borderRadius: 10,
+        padding: "10px 6px", color: couleur, textDecoration: "none", fontSize: 13,
+        fontWeight: 700, textAlign: "center", display: "block"
+      }
+    }, libelle),
+    h("button", {
+      onClick: () => setApercu(apercu === cle ? null : cle),
+      style: {
+        background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.1)",
+        borderRadius: 10, padding: "10px 8px", color: C.gray, cursor: "pointer",
+        fontSize: 11, fontWeight: 700, fontFamily: "inherit"
+      }
+    }, "👁"),
+    h("button", {
+      onClick: () => copier(texte, cle),
+      title: "Copier le message",
+      style: {
+        background: copie === cle ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.07)",
+        border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "10px 8px",
+        color: copie === cle ? C.green : C.gray, cursor: "pointer",
+        fontSize: 11, fontWeight: 700, fontFamily: "inherit"
+      }
+    }, copie === cle ? "✅" : "📋"));
+
+  const texteApercu = { email: emailData.corps, sms: smsText, wa: waText }[apercu];
+
+  return h("div", {
     style: {
-      fontSize: 11,
-      color: C.gold,
-      fontWeight: 700,
-      marginBottom: 6
+      background: `${bgBase}.07)`, border: `1px solid ${bgBase}.22)`,
+      borderRadius: 12, padding: 12, marginTop: 8
     }
-  }, "Objet : ", emailData.sujet), apercu === "sms" ? smsText : emailData.corps, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setApercu(null),
-    style: {
-      display: "block",
-      marginTop: 8,
-      background: "none",
-      border: "none",
-      color: C.gray,
-      cursor: "pointer",
-      fontSize: 12,
-      fontFamily: "inherit"
-    }
-  }, "✕ Fermer")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8
-    }
-  }, eleve.email && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 4,
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: hrefEmail,
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      flex: 1,
-      background: `${bgBase}.15)`,
-      border: `1px solid ${bgBase}.4)`,
-      borderRadius: 10,
-      padding: "10px 6px",
-      color: accent,
-      textDecoration: "none",
-      fontSize: 13,
-      fontWeight: 700,
-      textAlign: "center",
-      display: "block"
-    }
-  }, "✉️ Email"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setApercu(apercu === "email" ? null : "email"),
-    style: {
-      background: "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, "👁"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => copier(emailData.corps, "email"),
-    title: "Copier le message",
-    style: {
-      background: copie === "email" ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: copie === "email" ? C.green : C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, copie === "email" ? "✅" : "📋")), eleve.tel && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 4,
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: hrefSMS,
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      flex: 1,
-      background: "rgba(74,158,221,.15)",
-      border: "1px solid rgba(74,158,221,.4)",
-      borderRadius: 10,
-      padding: "10px 6px",
-      color: C.blue,
-      textDecoration: "none",
-      fontSize: 13,
-      fontWeight: 700,
-      textAlign: "center",
-      display: "block"
-    }
-  }, "📱 SMS"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setApercu(apercu === "sms" ? null : "sms"),
-    style: {
-      background: "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, "👁"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => copier(smsText, "sms"),
-    title: "Copier le message",
-    style: {
-      background: copie === "sms" ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.07)",
-      border: "1px solid rgba(255,255,255,.1)",
-      borderRadius: 10,
-      padding: "10px 8px",
-      color: copie === "sms" ? C.green : C.gray,
-      cursor: "pointer",
-      fontSize: 11,
-      fontWeight: 700,
-      fontFamily: "inherit"
-    }
-  }, copie === "sms" ? "✅" : "📋")), !eleve.email && !eleve.tel && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: C.gray,
-      fontStyle: "italic"
-    }
-  }, "Ajoutez un email ou un téléphone parent pour envoyer.")), (eleve.email || eleve.tel) && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: C.gray,
-      marginTop: 6,
-      lineHeight: 1.5
-    }
-  }, "Sur ordinateur, ✉️/📱 n'ouvrent une appli que si une messagerie par défaut est configurée. Sinon utilisez 📋 pour copier le message et le coller dans votre mail ou SMS."));
+  },
+    h(Lbl, { text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : "📨 Rappel paiement" }),
+
+    // ── Le fichier : un geste à part, le seul qui emporte vraiment la facture ──
+    pdfPossible && h("div", { style: { display: "flex", gap: 6, marginBottom: 10 } },
+      h("button", {
+        onClick: partagerPDF,
+        disabled: envoiPDF,
+        style: {
+          flex: 1, background: `linear-gradient(135deg,${C.gold},${C.goldD})`, border: "none",
+          borderRadius: 10, padding: "11px 10px", color: C.navy, fontSize: 13.5, fontWeight: 800,
+          cursor: envoiPDF ? "wait" : "pointer", fontFamily: "inherit", opacity: envoiPDF ? 0.6 : 1
+        }
+      }, envoiPDF ? "Préparation…" : "📎 Partager la facture PDF"),
+      h("button", {
+        onClick: telechargerPDF,
+        title: "Télécharger le PDF",
+        style: {
+          background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.12)",
+          borderRadius: 10, padding: "11px 12px", color: C.gray, cursor: "pointer",
+          fontSize: 13, fontFamily: "inherit"
+        }
+      }, "⤓")),
+
+    apercu && h("div", {
+      style: {
+        background: "rgba(0,0,0,.4)", borderRadius: 8, padding: 10, marginBottom: 8,
+        fontSize: 12, color: C.cream, lineHeight: 1.6, whiteSpace: "pre-line",
+        border: "1px solid rgba(255,255,255,.08)"
+      }
+    },
+      apercu === "email" && h("div", { style: { fontSize: 11, color: C.gold, fontWeight: 700, marginBottom: 6 } },
+        "Objet : " + emailData.sujet),
+      texteApercu,
+      h("button", {
+        onClick: () => setApercu(null),
+        style: { display: "block", marginTop: 8, background: "none", border: "none", color: C.gray, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }
+      }, "✕ Fermer")),
+
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+      eleve.tel ? canal("wa", "💬 WhatsApp", hrefWA, waText, "#25d366", "rgba(37,211,102,") : null,
+      eleve.tel ? canal("sms", "📱 SMS", hrefSMS, smsText, C.blue, "rgba(74,158,221,") : null,
+      eleve.email ? canal("email", "✉️ Email", hrefEmail, emailData.corps, accent, bgBase) : null,
+      !eleve.email && !eleve.tel && h("div", { style: { fontSize: 12, color: C.gray, fontStyle: "italic" } },
+        "Ajoutez un email ou un téléphone parent pour envoyer.")),
+
+    (eleve.email || eleve.tel) && h("div", { style: { fontSize: 11, color: C.gray, marginTop: 8, lineHeight: 1.55 } },
+      pdfPossible
+        ? "Le SMS ne peut pas porter de pièce jointe. Pour envoyer vraiment le PDF, utilisez « Partager la facture PDF » puis choisissez WhatsApp ou votre messagerie — le message part avec le fichier."
+        : "Sur ordinateur, ces boutons n'ouvrent une application que si une messagerie par défaut est configurée. Sinon utilisez 📋 pour copier le message."));
 }
 // ─── FORMULAIRE GROUPE ────────────────────────────────────────
 function FormulaireGroupe({
@@ -3362,6 +3410,370 @@ function ModaleFacture({
     }
   }, saving ? "💾 Enregistrement…" : `💾 Enregistrer — ${total}€`)));
 }
+// ─── FACTURE AU FORMAT PDF ───────────────────────────────────
+// Un vrai fichier PDF, fabriqué dans le navigateur, sans serveur ni bibliothèque.
+//
+// Pourquoi à la main : une bibliothèque comme jsPDF pèse 350 Ko pour dessiner une
+// page. L'application entière en fait 220. Elle ajouterait une dépendance à un CDN
+// sur le chemin critique d'un geste — envoyer sa facture — qui doit marcher depuis
+// un téléphone, en bas de l'immeuble, avec une barre de réseau. Un PDF d'une page
+// est un format assez simple pour qu'on l'écrive soi-même : le fichier produit fait
+// quelques kilo-octets, son texte reste sélectionnable, et rien ne peut tomber.
+//
+// Le format : une suite d'objets numérotés, une table (xref) donnant la position de
+// chacun en octets depuis le début, et une queue (trailer) pointant vers elle. D'où
+// la construction en chaîne d'octets — un caractère vaut un octet — avant conversion.
+
+// Les polices PDF de base lisent le WinAnsi, pas l'UTF-8. Table des caractères
+// français qui n'y sont pas à leur place naturelle.
+const WINANSI = {
+  "€": 128, "‚": 130, "ƒ": 131, "„": 132, "…": 133, "†": 134, "‡": 135,
+  "ˆ": 136, "‰": 137, "Š": 138, "‹": 139, "Œ": 140, "Ž": 142,
+  "‘": 145, "’": 146, "“": 147, "”": 148, "•": 149, "–": 150, "—": 151,
+  "˜": 152, "™": 153, "š": 154, "›": 155, "œ": 156, "ž": 158, "Ÿ": 159
+};
+
+const versWinAnsi = texte => String(texte == null ? "" : texte).split("").map(c => {
+  const code = c.charCodeAt(0);
+  if (code < 128) return c;
+  if (WINANSI[c] != null) return String.fromCharCode(WINANSI[c]);
+  if (code <= 255) return c;
+  return "?";
+}).join("");
+
+// Largeurs Helvetica en millièmes de point, pour les caractères imprimables.
+// Dans cette police, les lettres accentuées ont la largeur de leur lettre de base.
+const LARGEURS = (() => {
+  const l = {};
+  const poser = (chaine, largeur) => chaine.split("").forEach(c => { l[c] = largeur; });
+  poser(" !I|ijlt.,:;'`", 278);
+  poser("\"", 355); poser("()[]{}/\\", 333); poser("*", 389);
+  poser("#$0123456789+<=>~^", 556);
+  poser("%", 889); poser("&", 667); poser("@", 1015);
+  poser("?_", 556); poser("-", 333);
+  poser("abcdeghknopqsuvxyz", 556);
+  poser("f", 278); poser("r", 333); poser("m", 833); poser("w", 722);
+  poser("ABDEHKNPRSUVXY", 722);
+  poser("CGOQ", 778); poser("FJLTZ", 611); poser("I", 278);
+  poser("M", 833); poser("W", 944);
+  return l;
+})();
+
+const largeurTexte = (texte, taille, gras) => {
+  const base = String(texte || "").split("").reduce((s, c) => {
+    const brut = c.charCodeAt(0) > 127 ? "e" : c; // accentué ≈ sa lettre de base
+    return s + (LARGEURS[brut] != null ? LARGEURS[brut] : 556);
+  }, 0);
+  // Le gras d'Helvetica est sensiblement plus large que le romain.
+  return base * taille / 1000 * (gras ? 1.06 : 1);
+};
+
+// Coupe un texte à une largeur donnée, sur les espaces.
+const couperLignes = (texte, largeurMax, taille, gras) => {
+  const mots = String(texte || "").split(/\s+/).filter(Boolean);
+  const lignes = [];
+  let courante = "";
+  mots.forEach(mot => {
+    const essai = courante ? `${courante} ${mot}` : mot;
+    if (largeurTexte(essai, taille, gras) <= largeurMax || !courante) {
+      courante = essai;
+    } else {
+      lignes.push(courante);
+      courante = mot;
+    }
+  });
+  if (courante) lignes.push(courante);
+  return lignes;
+};
+
+const echapperPDF = t => versWinAnsi(t).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+const n2 = x => Math.round(x * 100) / 100;
+
+// Les métadonnées d'un PDF ne se lisent pas dans l'encodage des polices : une
+// chaîne accentuée doit y être en UTF-16BE précédée de son indicateur d'ordre
+// d'octets, sans quoi le titre affiché par le lecteur part en charabia.
+const chaineUTF16 = texte => {
+  let s = "\\376\\377"; // BOM FE FF
+  for (const c of String(texte || "")) {
+    const code = c.codePointAt(0);
+    const unites = code > 0xffff
+      ? [0xd800 + ((code - 0x10000) >> 10), 0xdc00 + ((code - 0x10000) & 0x3ff)]
+      : [code];
+    unites.forEach(u => {
+      s += "\\" + ((u >> 8) & 0xff).toString(8).padStart(3, "0");
+      s += "\\" + (u & 0xff).toString(8).padStart(3, "0");
+    });
+  }
+  return s;
+};
+
+/**
+ * Page A4 sur laquelle on dessine. Les ordonnées sont comptées depuis le HAUT,
+ * comme on lit — la conversion vers le repère PDF se fait ici, une seule fois.
+ */
+function PageA4() {
+  const LARGEUR = 595.28, HAUTEUR = 841.89;
+  const ops = [];
+  const y = v => HAUTEUR - v;
+
+  return {
+    LARGEUR, HAUTEUR,
+    rect(x, haut, largeur, hauteur, couleur) {
+      const [r, v, b] = couleur;
+      ops.push(`${n2(r)} ${n2(v)} ${n2(b)} rg`, `${n2(x)} ${n2(y(haut + hauteur))} ${n2(largeur)} ${n2(hauteur)} re f`);
+      return this;
+    },
+    ligne(x1, haut1, x2, haut2, couleur, epaisseur) {
+      const [r, v, b] = couleur;
+      ops.push(`${n2(r)} ${n2(v)} ${n2(b)} RG`, `${n2(epaisseur || 0.5)} w`,
+               `${n2(x1)} ${n2(y(haut1))} m ${n2(x2)} ${n2(y(haut2))} l S`);
+      return this;
+    },
+    texte(x, haut, contenu, opts = {}) {
+      const { taille = 10, gras = false, couleur = [0, 0, 0], align = "gauche" } = opts;
+      const [r, v, b] = couleur;
+      let posX = x;
+      if (align === "droite") posX = x - largeurTexte(contenu, taille, gras);
+      else if (align === "centre") posX = x - largeurTexte(contenu, taille, gras) / 2;
+      ops.push("BT", `/${gras ? "F2" : "F1"} ${n2(taille)} Tf`, `${n2(r)} ${n2(v)} ${n2(b)} rg`,
+               `1 0 0 1 ${n2(posX)} ${n2(y(haut))} Tm`, `(${echapperPDF(contenu)}) Tj`, "ET");
+      return this;
+    },
+    /** Écrit un paragraphe et renvoie l'ordonnée atteinte. */
+    paragraphe(x, haut, contenu, largeurMax, opts = {}) {
+      const { taille = 10, gras = false, interligne = 1.35 } = opts;
+      let courant = haut;
+      couperLignes(contenu, largeurMax, taille, gras).forEach(ligne => {
+        this.texte(x, courant, ligne, opts);
+        courant += taille * interligne;
+      });
+      return courant;
+    },
+    flux: () => ops.join("\n")
+  };
+}
+
+/** Assemble les objets, la table de références et la queue du fichier. */
+function assemblerPDF(page, meta = {}) {
+  const flux = page.flux();
+  const objets = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n2(page.LARGEUR)} ${n2(page.HAUTEUR)}] ` +
+      "/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+    "<< /Title (" + chaineUTF16(meta.titre || "Facture") + ") /Producer (Boost'Etude) >>"
+  ];
+
+  let fichier = "%PDF-1.4\n";
+  const positions = [];
+  objets.forEach((corps, i) => {
+    positions.push(fichier.length);
+    fichier += `${i + 1} 0 obj\n${corps}\nendobj\n`;
+  });
+
+  const debutXref = fichier.length;
+  fichier += `xref\n0 ${objets.length + 1}\n0000000000 65535 f \n`;
+  positions.forEach(p => { fichier += String(p).padStart(10, "0") + " 00000 n \n"; });
+  fichier += `trailer\n<< /Size ${objets.length + 1} /Root 1 0 R /Info ${objets.length} 0 R >>\n` +
+             `startxref\n${debutXref}\n%%EOF`;
+
+  const octets = new Uint8Array(fichier.length);
+  for (let i = 0; i < fichier.length; i++) octets[i] = fichier.charCodeAt(i) & 0xff;
+  return octets;
+}
+
+const NAVY_PDF = [0.039, 0.078, 0.157];   // #0a1428
+const OR_PDF = [0.831, 0.686, 0.216];     // #d4af37
+const GRIS = [0.42, 0.42, 0.42];
+const GRIS_PALE = [0.62, 0.62, 0.62];
+const NOIR = [0.1, 0.1, 0.1];
+
+/**
+ * Dessine la facture. Le contenu reprend exactement celui de l'écran
+ * (`VueImpression`) : mêmes mentions légales, mêmes totaux, même pied de page.
+ */
+function construireFacturePDF(facture, eleve, parametres) {
+  const p = parametres || {};
+  const page = PageA4();
+  const M = 48;                       // marge
+  const DROITE = page.LARGEUR - M;
+  const dates = facture.datesSeances || [];
+  const emise = !!facture.numero;
+  const matieres = groupParMatiere(dates);
+  const mentionEI = (p.forme_juridique || "EI").toUpperCase() === "EI" ? "Entrepreneur individuel" : p.forme_juridique;
+
+  let y = M + 10;
+
+  // ── En-tête : l'émetteur à gauche, l'identification de la facture à droite ──
+  page.texte(M, y, p.denomination || "Boost'Étude", { taille: 19, gras: true, couleur: NAVY_PDF });
+  let yg = y + 16;
+  [
+    p.exploitant ? `${p.exploitant} · ${mentionEI}` : null,
+    p.adresse || null,
+    [p.code_postal, p.ville].filter(Boolean).join(" ") || null,
+    p.siret ? `SIRET ${p.siret}${p.ape ? ` · APE ${p.ape}` : ""}` : null,
+    p.telephone || null,
+    p.email || null
+  ].filter(Boolean).forEach(l => {
+    page.texte(M, yg, l, { taille: 8.5, couleur: GRIS });
+    yg += 11;
+  });
+
+  page.texte(DROITE, y - 2, "FACTURE", { taille: 9, gras: true, couleur: OR_PDF, align: "droite" });
+  page.texte(DROITE, y + 13, emise ? `N° ${facture.numero}` : "BROUILLON",
+    { taille: 13, gras: true, couleur: emise ? NAVY_PDF : [0.69, 0.13, 0.13], align: "droite" });
+  let yd = y + 27;
+  if (emise && facture.dateEmission) {
+    page.texte(DROITE, yd, `Émise le ${fmtDateLongue(facture.dateEmission)}`, { taille: 8.5, couleur: GRIS, align: "droite" });
+    yd += 11;
+  }
+  const periode = dates.length
+    ? (dates.length === 1 ? fmtDateLongue(dates[0].date) : `${fmtDateCourt(dates[0].date)} – ${fmtDateCourt(dates[dates.length - 1].date)}`)
+    : "Facture en cours";
+  page.texte(DROITE, yd, periode, { taille: 8.5, couleur: GRIS, align: "droite" });
+
+  y = Math.max(yg, yd) + 16;
+  page.rect(M, y, DROITE - M, 2, NAVY_PDF);
+  y += 20;
+
+  // ── Destinataire ───────────────────────────────────────────
+  page.rect(M, y - 10, DROITE - M, 48, [0.97, 0.97, 0.96]);
+  page.texte(M + 12, y + 2, "FACTURÉ À", { taille: 7.5, gras: true, couleur: GRIS_PALE });
+  page.texte(M + 12, y + 16, eleve.parent || "", { taille: 12, gras: true, couleur: NAVY_PDF });
+  page.texte(M + 12, y + 30, `Élève : ${eleve.prenom} ${eleve.nom} — ${eleve.niveau}`, { taille: 10, couleur: GRIS });
+  y += 60;
+
+  // ── Tableau des prestations ────────────────────────────────
+  const COL_QTE = DROITE - 190, COL_TARIF = DROITE - 95;
+  page.rect(M, y - 10, DROITE - M, 22, NAVY_PDF);
+  page.texte(M + 10, y + 4, "Prestation", { taille: 9, gras: true, couleur: [1, 1, 1] });
+  page.texte(COL_QTE, y + 4, "Qté", { taille: 9, gras: true, couleur: [1, 1, 1], align: "droite" });
+  page.texte(COL_TARIF, y + 4, "Tarif", { taille: 9, gras: true, couleur: [1, 1, 1], align: "droite" });
+  page.texte(DROITE - 10, y + 4, "Total", { taille: 9, gras: true, couleur: [1, 1, 1], align: "droite" });
+  y += 26;
+
+  if (matieres.length === 0) {
+    page.texte(M + 10, y + 6, "Aucune séance", { taille: 9.5, couleur: GRIS });
+    y += 24;
+  } else {
+    matieres.forEach((g, i) => {
+      const total = parseFloat((g.dates.length * 2 * eleve.th).toFixed(2));
+      page.texte(M + 10, y + 4, `${g.matiere || "Cours"} — ${eleve.niveau}`, { taille: 10, gras: true, couleur: NOIR });
+      page.texte(M + 10, y + 16,
+        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`,
+        { taille: 8, couleur: GRIS });
+      const finDates = page.paragraphe(M + 10, y + 27, g.dates.map(d => fmtDateCourt(d)).join(" · "),
+        COL_QTE - M - 30, { taille: 8, couleur: GRIS_PALE, interligne: 1.3 });
+      page.texte(COL_QTE, y + 4, `${g.dates.length * 2} h`, { taille: 9.5, couleur: GRIS, align: "droite" });
+      page.texte(COL_TARIF, y + 4, `${euros(eleve.th)}/h`, { taille: 9.5, couleur: GRIS, align: "droite" });
+      page.texte(DROITE - 10, y + 4, euros(total), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
+      y = Math.max(finDates, y + 34) + 6;
+      if (i < matieres.length - 1) {
+        page.ligne(M, y - 3, DROITE, y - 3, [0.9, 0.9, 0.9], 0.5);
+        y += 4;
+      }
+    });
+  }
+
+  // ── Net à payer ────────────────────────────────────────────
+  y += 8;
+  page.rect(M, y - 8, DROITE - M, 34, NAVY_PDF);
+  page.texte(M + 16, y + 13, "NET À PAYER", { taille: 11, gras: true, couleur: [1, 1, 1] });
+  page.texte(DROITE - 16, y + 15, euros(facture.montant), { taille: 19, gras: true, couleur: OR_PDF, align: "droite" });
+  y += 38;
+  page.texte(DROITE, y + 4, p.mention_tva || "TVA non applicable, article 293 B du CGI",
+    { taille: 8.5, couleur: GRIS, align: "droite" });
+  y += 20;
+
+  // ── Règlement ──────────────────────────────────────────────
+  page.ligne(M, y, DROITE, y, [0.9, 0.9, 0.9], 0.5);
+  y += 14;
+  const payee = facture.statut === "paye";
+  page.texte(M, y, "Règlement", { taille: 9.5, gras: true, couleur: NOIR });
+  y += 13;
+  if (payee) {
+    page.texte(M, y, `Facture acquittée${facture.datePaiement ? ` le ${fmtDateCourt(facture.datePaiement)}` : ""} (${facture.mode || eleve.mp}).`,
+      { taille: 9, couleur: [0.18, 0.49, 0.31] });
+    y += 13;
+  } else {
+    y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
+    y += 2;
+    if (p.iban) {
+      page.rect(M, y, DROITE - M, 44, [0.97, 0.97, 0.96]);
+      page.texte(M + 10, y + 13, "Coordonnées bancaires", { taille: 8.5, gras: true, couleur: NOIR });
+      page.texte(M + 10, y + 25, `${p.titulaire_compte ? p.titulaire_compte + " · " : ""}IBAN ${p.iban}${p.bic ? " · BIC " + p.bic : ""}`,
+        { taille: 8, couleur: GRIS });
+      page.texte(M + 10, y + 36, `Référence à indiquer : ${eleve.prenom} ${eleve.nom}`, { taille: 8, gras: true, couleur: NOIR });
+      y += 52;
+    }
+  }
+  if (p.delai_paiement) {
+    page.texte(M, y + 4, p.delai_paiement, { taille: 8.5, couleur: GRIS });
+    y += 16;
+  }
+
+  // ── Pied de facture : mentions obligatoires ────────────────
+  const raisonSociale = [p.denomination, p.exploitant && p.exploitant !== p.denomination ? p.exploitant : null].filter(Boolean).join(" — ");
+  let pied = page.HAUTEUR - M - 34;
+  page.ligne(M, pied - 8, DROITE, pied - 8, [0.93, 0.93, 0.93], 0.5);
+  [
+    p.penalites_retard,
+    p.escompte,
+    [raisonSociale || "Boost'Étude", mentionEI, p.siret ? "SIRET " + p.siret : null, p.ape ? "APE " + p.ape : null].filter(Boolean).join(" · ")
+  ].filter(Boolean).forEach(l => {
+    pied = page.paragraphe(M, pied, l, DROITE - M, { taille: 6.8, couleur: GRIS_PALE, interligne: 1.35 });
+    pied += 1;
+  });
+
+  return assemblerPDF(page, { titre: `Facture ${facture.numero || "brouillon"} — ${eleve.prenom} ${eleve.nom}` });
+}
+
+const nomFichierFacture = (facture, eleve) => {
+  const base = facture.numero ? facture.numero : "brouillon";
+  const qui = `${eleve.prenom}-${eleve.nom}`.replace(/[^A-Za-zÀ-ÿ0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `Facture-${base}-${qui}.pdf`.replace(/\s+/g, "");
+};
+
+const facturePDFBlob = (facture, eleve, parametres) =>
+  new Blob([construireFacturePDF(facture, eleve, parametres)], { type: "application/pdf" });
+
+/**
+ * Partage le PDF par les applications du téléphone — WhatsApp, mail, Drive.
+ * Un SMS ne transporte pas de pièce jointe : le partage natif est le seul chemin
+ * qui dépose vraiment le fichier dans une conversation. Sur un ordinateur, ou si le
+ * navigateur ne sait pas partager de fichiers, on retombe sur le téléchargement.
+ */
+async function partagerFacturePDF(facture, eleve, parametres, texte) {
+  const blob = facturePDFBlob(facture, eleve, parametres);
+  const nom = nomFichierFacture(facture, eleve);
+  const fichier = typeof File === "function" ? new File([blob], nom, { type: "application/pdf" }) : null;
+
+  if (fichier && navigator.canShare && navigator.canShare({ files: [fichier] })) {
+    try {
+      await navigator.share({ files: [fichier], text: texte || "" });
+      return { partage: true };
+    } catch (e) {
+      // L'utilisateur a refermé le menu de partage : ce n'est pas une erreur.
+      if (e && e.name === "AbortError") return { partage: false, annule: true };
+    }
+  }
+  telechargerBlob(blob, nom);
+  return { partage: false, telecharge: true };
+}
+
+function telechargerBlob(blob, nom) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nom;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 // ─── VUE IMPRESSION ──────────────────────────────────────────
 // La facture telle qu'elle part chez les parents. Deux états bien distincts :
 //
@@ -3430,9 +3842,21 @@ function VueImpression({
             style: { background: "rgba(224,85,85,.12)", border: "1px solid rgba(224,85,85,.35)", borderRadius: 10, padding: "9px 14px", color: C.red, cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }
           }, "🗑 Supprimer"),
           h("button", {
-            onClick: () => window.print(),
+            onClick: () => {
+              try {
+                telechargerBlob(facturePDFBlob(facture, eleve, p), nomFichierFacture(facture, eleve));
+                signalerSucces("PDF téléchargé.");
+              } catch (e) {
+                signalerErreur(e);
+              }
+            },
             style: { background: `linear-gradient(135deg,${C.gold},${C.goldD})`, border: "none", borderRadius: 10, padding: "9px 16px", color: C.navy, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }
-          }, "🖨 PDF")
+          }, "⤓ PDF"),
+          h("button", {
+            onClick: () => window.print(),
+            title: "Imprimer",
+            style: { background: "rgba(255,255,255,.08)", border: "none", borderRadius: 10, padding: "9px 12px", color: C.gray, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }
+          }, "🖨")
         )
       ),
 
@@ -3450,7 +3874,10 @@ function VueImpression({
       emise && h("div", { className: "sans-impression", style: { background: "rgba(76,175,125,.1)", border: "1px solid rgba(76,175,125,.3)", borderRadius: 12, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: C.green, lineHeight: 1.6 } },
         `Facture émise le ${fmtDateLongue(facture.dateEmission)} sous le numéro ${facture.numero}. Son montant est figé.`),
 
-      h(PanneauEnvoi, { eleve, mois: periodeLabel, nb: facture.nbSeances, montant: facture.montant, dates, type: "facture" }),
+      h(PanneauEnvoi, {
+        eleve, mois: facture.numero || periodeLabel, nb: facture.nbSeances, montant: facture.montant, dates,
+        type: "facture", facture, parametres: p, seuil: p.seuil_facturation
+      }),
 
       // ── La facture elle-même ───────────────────────────────
       h("div", { className: "facture-papier", style: { background: "#fff", borderRadius: 16, padding: "28px 24px", color: "#1a1a1a", fontFamily: "Georgia,serif", marginTop: 14, boxShadow: "0 8px 40px rgba(0,0,0,.4)" } },
@@ -3616,6 +4043,12 @@ function ModuleFacturation({
   };
   const actifs = eleves.filter(e => e.actif !== false);
   const ouvertes = factures.filter(f => f.statut !== "paye");
+  // Seuil de signalement, réglable dans Réglages (trois séances par défaut).
+  const seuil = Math.max(1, parseInt(parametres?.seuil_facturation, 10) || SEUIL_FACTURATION_DEFAUT);
+  // À facturer : la facture a atteint le seuil et n'a pas encore de numéro.
+  const aFacturer = ouvertes
+    .filter(f => !f.numero && (f.nbSeances || 0) >= seuil && actifs.find(e => e.id === f.eleveId))
+    .sort((a, b) => (b.nbSeances || 0) - (a.nbSeances || 0));
   const ouverteDe = eid => ouvertes.find(f => f.eleveId === eid);
   // Solde ouvert dont l'élève est désactivé ou n'existe plus : à traiter à part,
   // sinon il reste invisible et impossible à solder ou supprimer.
@@ -3674,7 +4107,7 @@ function ModuleFacturation({
     }
   }, [{
     k: "encours",
-    l: `💰 En cours${ouvertes.length > 0 ? ` (${ouvertes.length})` : ""}`
+    l: `💰 En cours${aFacturer.length > 0 ? ` • ${aFacturer.length} à envoyer` : ouvertes.length > 0 ? ` (${ouvertes.length})` : ""}`
   }, {
     k: "histo",
     l: "📋 Historique"
@@ -3699,14 +4132,46 @@ function ModuleFacturation({
       fontFamily: "inherit",
       whiteSpace: "nowrap"
     }
-  }, l))), onglet === "encours" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, l))), onglet === "encours" && /*#__PURE__*/React.createElement("div", null,
+  aFacturer.length > 0 && h("div", {
+    style: {
+      background: "rgba(212,175,55,.1)", border: "1px solid rgba(212,175,55,.35)",
+      borderRadius: 14, padding: 14, marginBottom: 14
+    }
+  },
+    h("div", { style: { fontSize: 15, fontWeight: 800, color: C.gold, fontFamily: FD, marginBottom: 3 } },
+      `${aFacturer.length} facture${aFacturer.length > 1 ? "s" : ""} à envoyer`),
+    h("div", { style: { fontSize: 12, color: C.gray, marginBottom: 10, lineHeight: 1.5 } },
+      `Ces élèves ont atteint ${seuil} séances. Ouvrez la facture, émettez-la, puis partagez le PDF au parent.`),
+    h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      aFacturer.map(f => {
+        const el = eleveDe(f.eleveId);
+        if (!el) return null;
+        return h("button", {
+          key: f.id,
+          onClick: () => setImpression({ f, e: el }),
+          style: {
+            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+            background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)",
+            borderRadius: 10, padding: "10px 12px", cursor: "pointer", fontFamily: "inherit",
+            textAlign: "left", width: "100%"
+          }
+        },
+          h("span", { style: { fontSize: 13.5, fontWeight: 700, color: C.cream } },
+            `${el.prenom} ${el.nom}`,
+            h("span", { style: { fontSize: 11.5, color: C.gray, fontWeight: 600 } },
+              ` • ${f.nbSeances} séance${f.nbSeances > 1 ? "s" : ""}`)),
+          h("span", { style: { fontSize: 14, fontWeight: 800, color: C.gold, fontFamily: FD, whiteSpace: "nowrap" } },
+            `${f.montant} € ›`));
+      }))),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: C.gray,
       marginBottom: 14,
       lineHeight: 1.5
     }
-  }, "La facturation est cumulative : chaque élève a une seule facture qui grossit à chaque séance présente, jusqu'à ce qu'elle soit marquée payée — elle est alors figée et une nouvelle facture repart de zéro."), /*#__PURE__*/React.createElement("div", {
+  }, `La facturation est cumulative : chaque élève a une seule facture qui grossit à chaque séance présente. Au bout de ${seuil} séances, elle est signalée ici — à vous de l'émettre et de l'envoyer.`), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr",
@@ -4705,6 +5170,17 @@ function OngletEntreprise({ parametres, onSave }) {
     ),
 
     h("div", { style: { borderTop: "1px solid rgba(212,175,55,.1)", paddingTop: 14 } },
+      h(Lbl, { text: "Rythme de facturation" }),
+      h(InputText, {
+        label: "Facturer toutes les … séances",
+        value: String(f.seuil_facturation == null ? SEUIL_FACTURATION_DEFAUT : f.seuil_facturation),
+        onChange: v => set("seuil_facturation", v.replace(/\D/g, "").slice(0, 2)),
+        placeholder: "3", type: "tel"
+      }),
+      h("div", { style: { fontSize: 11, color: C.gray, marginTop: -8, marginBottom: 14, lineHeight: 1.5 } },
+        "Au-delà de ce nombre de séances suivies, l'élève est signalé dans Facturation. " +
+        "Le chiffre apparaît aussi dans le message au parent : « envoyé toutes les " +
+        (f.seuil_facturation || SEUIL_FACTURATION_DEFAUT) + " séances »."),
       h(Lbl, { text: "Mentions de facturation" }),
       h(InputText, { label: "Préfixe des numéros", value: f.prefixe_facture || "", onChange: v => set("prefixe_facture", v), placeholder: "F" }),
       h("div", { style: { fontSize: 11, color: C.gray, marginTop: -8, marginBottom: 14 } },

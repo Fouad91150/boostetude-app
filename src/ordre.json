@@ -18,6 +18,7 @@
   "14-carte-appel.js",
   "15-module-appel.js",
   "16-modale-facture.js",
+  "16b-facture-pdf.js",
   "17-vue-impression.js",
   "18-module-facturation.js",
   "19-module-dashboard.js",

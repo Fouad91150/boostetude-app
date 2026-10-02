@@ -65,7 +65,11 @@ export function chargerApp() {
              estCompteRenduVide, phrase,
              Local, fileAppels, envoyerAppel, rejouerFileAppels, estPanneReseau,
              cleBrouillonAppel, Signal, signalerErreur, signalerSucces, signalerInfo,
-             PileBandeaux, BandeauHorsLigne };
+             PileBandeaux, BandeauHorsLigne,
+             construireFacturePDF, nomFichierFacture, PanneauEnvoi,
+             makeFactureWhatsApp, makeFactureSMS, makeFactureEmail, makeRappelSMS,
+             MOYENS_PAIEMENT_TEXTE, mentionAutomatique, SEUIL_FACTURATION_DEFAUT,
+             largeurTexte, couperLignes, versWinAnsi };
   `)(React, fenetre, doc, { clipboard: null, onLine: true },
      { createObjectURL: () => "blob:x", revokeObjectURL() {} },
      function Blob() {},
