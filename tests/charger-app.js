@@ -59,10 +59,10 @@ export function chargerApp() {
   return new Function("React", "window", "document", "navigator", "URL", "Blob", "localStorage", script + `
     return { VueImpression, ModuleReglages, OngletEntreprise, OngletLivreRecettes, OngletDonnees,
              BlocConformite, champsManquants, versCSV, ModuleFacturation, ModuleAppel, App, api, C,
-             ModuleSuivi, ModuleBilans, CarteBilan, CarteSuiviEleve,
-             bilanDonnees, makeBilanWhatsApp, makeBilanSMS, makeBilanEmail,
+             ModuleSuivi, CarteSuiviEleve,
              lundiDe, addJours, isoSemaine, libelleSemaine, telWhatsApp, splitNotions,
-             estCompteRenduVide, phrase,
+             estCompteRenduVide,
+             phrase,
              Local, fileAppels, envoyerAppel, rejouerFileAppels, estPanneReseau,
              cleBrouillonAppel, Signal, signalerErreur, signalerSucces, signalerInfo,
              PileBandeaux, BandeauHorsLigne,

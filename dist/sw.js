@@ -4,7 +4,7 @@
 // délibéré : un cache trop zélé rejouerait exactement la panne de septembre,
 // où une ancienne version continuait de s'afficher.
 // Remplacé au build par le numéro de version : chaque version a son propre cache.
-const CACHE = "boostetude-3.1.0";
+const CACHE = "boostetude-3.2.0";
 const COQUILLE = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", e => {

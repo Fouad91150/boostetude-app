@@ -11,7 +11,6 @@ function App() {
   const [parametres, setParametres] = useState(null);
   const [comptesRendus, setComptesRendus] = useState([]);
   const [encaissements, setEncaissements] = useState([]);
-  const [bilans, setBilans] = useState([]);
   const [stages, setStages] = useState([]);
   const [inscrits, setInscrits] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -56,7 +55,6 @@ function App() {
         setInscrits(st.inscrits);
       }
       setComptesRendus(await api.fetchComptesRendus());
-      setBilans(await api.fetchBilansEnvoyes());
     } catch (e) {
       setDataError(e.message || "Erreur de chargement des données");
     }
@@ -86,7 +84,6 @@ function App() {
       setAppels(ap);
       setFactures(fa);
       setComptesRendus(await api.fetchComptesRendus());
-      setBilans(await api.fetchBilansEnvoyes());
       if (role === "admin") {
         setEncaissements(await api.fetchEncaissements().catch(() => []));
         setParametres(await api.fetchParametres());
@@ -176,14 +173,6 @@ function App() {
     await api.saveComptesRendus(groupeId, date, parEleve, auteurId);
     setComptesRendus(await api.fetchComptesRendus());
   };
-  // La trace d'envoi est un confort (badge « ✓ envoyé »), jamais un préalable :
-  // si elle échoue, le message part quand même.
-  const handleLogBilan = async row => {
-    try {
-      await api.logBilan(row);
-      setBilans(await api.fetchBilansEnvoyes());
-    } catch (e) {}
-  };
   const handleSaveTaux = async (profId, taux) => {
     await api.saveTauxProf(profId, taux);
     setProfs(await api.fetchProfs());
@@ -255,8 +244,7 @@ function App() {
     exporte_le: new Date().toISOString(),
     version: window.__APP_VERSION || null,
     eleves, groupes, appels, factures,
-    comptes_rendus: await api.fetchComptesRendus().catch(() => []),
-    bilans_envoyes: await api.fetchBilansEnvoyes().catch(() => [])
+    comptes_rendus: await api.fetchComptesRendus().catch(() => [])
   });
   const handleSaveFacture = async (factureId, eleveId, data) => {
     await api.saveFacture(factureId, eleveId, data);
@@ -326,18 +314,6 @@ function App() {
     return !f || f.statut === "annulee";
   }).length;
   const conformiteIncomplete = isAdmin && champsManquants(parametres).length > 0;
-  const lundiCourant = lundiDe(todayStr());
-  const dimancheCourant = addJours(lundiCourant, 6);
-  const semaineCouranteId = isoSemaine(lundiCourant);
-  const vusCetteSemaine = new Set();
-  Object.entries(appels).forEach(([k, p]) => {
-    const parts = k.split(":");
-    if (parts[0] !== "ap") return;
-    if (parts[2] < lundiCourant || parts[2] > dimancheCourant) return;
-    Object.entries(p).forEach(([eid, st]) => { if (st) vusCetteSemaine.add(eid); });
-  });
-  const bilansFaits = new Set(bilans.filter(b => b.semaine === semaineCouranteId).map(b => b.eleve_id));
-  const nbBilansDus = [...vusCetteSemaine].filter(id => !bilansFaits.has(id)).length;
   const TABS = isAdmin ? [{
     k: "dashboard",
     i: "📊",
@@ -355,11 +331,6 @@ function App() {
     k: "suivi",
     i: "📝",
     l: "Suivi"
-  }, {
-    k: "bilans",
-    i: "📨",
-    l: "Bilans",
-    badge: nbBilansDus > 0 ? nbBilansDus : null
   }, {
     k: "factures",
     i: "💰",
@@ -383,25 +354,18 @@ function App() {
     k: "suivi",
     i: "📝",
     l: "Suivi"
-  }, {
-    k: "bilans",
-    i: "📨",
-    l: "Bilans",
-    badge: nbBilansDus > 0 ? nbBilansDus : null
   }];
   const TITRES = isAdmin ? {
     dashboard: "Vue d'ensemble",
     eleves: "Élèves",
     appel: "Feuille d'appel",
     suivi: "Suivi de séance",
-    bilans: "Bilans hebdo",
     factures: "Facturation",
     stages: "Stages de vacances",
     reglages: "Réglages"
   } : {
     appel: "Feuille d'appel",
-    suivi: "Suivi de séance",
-    bilans: "Bilans hebdo"
+    suivi: "Suivi de séance"
   };
   // L'en-tête porte la marque et le nom de l'écran ; le titre est répété en
   // grand juste en dessous, sur le fond clair, là où l'œil le cherche.
@@ -557,23 +521,6 @@ function App() {
     comptesRendus: comptesRendus,
     monProfilId: monProfil && monProfil.id ? monProfil.id : null,
     onSave: handleSaveComptesRendus
-  }), tab === "bilans" && /*#__PURE__*/React.createElement(ModuleBilans, {
-    eleves: eleves,
-    groupes: groupes,
-    appels: appels,
-    comptesRendus: comptesRendus,
-    bilans: bilans,
-    monProfilId: monProfil && monProfil.id ? monProfil.id : null,
-    onLog: handleLogBilan
-  }), tab === "stages" && isAdmin && /*#__PURE__*/React.createElement(ModuleStages, {
-    stages: stages,
-    inscrits: inscrits,
-    eleves: eleves,
-    factures: factures,
-    onSaveStage: handleSaveStage,
-    onInscrire: handleInscrireStage,
-    onDesinscrire: handleDesinscrireStage,
-    onFacturerStage: handleFacturerStage
   }), tab === "reglages" && isAdmin && /*#__PURE__*/React.createElement(ModuleReglages, {
     parametres: parametres,
     eleves: eleves,

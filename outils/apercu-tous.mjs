@@ -96,7 +96,6 @@ const ECRANS = [
   ["eleves", "Élèves", null],
   ["appel", "Appel", null],
   ["suivi", "Suivi", null],
-  ["bilans", "Bilans", null],
   ["factures", "Factures", null],
   ["factures-relances", "Factures", "Relances"],
   ["factures-gerer", "Factures", "Gérer"],

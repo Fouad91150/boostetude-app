@@ -87,7 +87,7 @@ await o.waitForTimeout(2000);
 
 // Chaque onglet est visité : une erreur ne se produit souvent qu'à l'affichage
 // d'un écran précis, et personne ne la voit avant l'utilisateur.
-const ONGLETS = ["Accueil", "Élèves", "Appel", "Suivi", "Bilans", "Factures", "Réglages"];
+const ONGLETS = ["Accueil", "Élèves", "Appel", "Suivi", "Factures", "Réglages"];
 for (const nom of ONGLETS) {
   const bouton = o.locator(`button:has-text("${nom}")`).last();
   if (await bouton.count()) {
