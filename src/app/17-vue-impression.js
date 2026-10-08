@@ -26,8 +26,16 @@ function VueImpression({
   const [emission, setEmission] = useState(false);
   const p = parametres || {};
   const dates = facture.datesSeances || [];
-  const periodeLabel = dates.length ? dates.length === 1 ? fmtDateLongue(dates[0].date) : `${fmtDateCourt(dates[0].date)} – ${fmtDateCourt(dates[dates.length - 1].date)}` : "Facture en cours";
+  const periodeLabelCours = dates.length ? dates.length === 1 ? fmtDateLongue(dates[0].date) : `${fmtDateCourt(dates[0].date)} – ${fmtDateCourt(dates[dates.length - 1].date)}` : "Facture en cours";
   const matieresGroupees = groupParMatiere(dates);
+  // Un stage se vend au forfait : une seule ligne, le libellé et son montant.
+  const forfait = (facture.prestation || "").trim();
+  const periodeForfait = facture.periodeDebut
+    ? (facture.periodeFin && facture.periodeFin !== facture.periodeDebut
+        ? `Du ${fmtDateCourt(facture.periodeDebut)} au ${fmtDateLongue(facture.periodeFin)}`
+        : fmtDateLongue(facture.periodeDebut))
+    : "";
+  const periodeLabel = forfait ? (periodeForfait || "Forfait") : periodeLabelCours;
   const emise = !!facture.numero;
   const manquants = champsManquants(p);
 
@@ -51,19 +59,19 @@ function VueImpression({
 
   const ligneGrise = (contenu, i) => h("div", { key: i, style: { fontSize: 10, color: "#8a8a8a", lineHeight: 1.7 } }, contenu);
 
-  return h("div", { style: { position: "fixed", inset: 0, zIndex: 600, background: C.navy, overflowY: "auto" } },
+  return h("div", { style: { position: "fixed", inset: 0, zIndex: 600, background: C.fond, overflowY: "auto" } },
     h("div", { className: "zone-facture", style: { maxWidth: 520, margin: "0 auto", padding: "20px 16px 60px" } },
 
       // ── Barre d'actions (jamais imprimée) ──────────────────
       h("div", { className: "sans-impression", style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8 } },
         h("button", {
           onClick: onClose,
-          style: { background: "rgba(255,255,255,.08)", border: "none", borderRadius: 10, padding: "9px 14px", color: C.gold, cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }
+          style: { background: C.surface, border: "none", borderRadius: 10, padding: "9px 14px", color: C.gold, cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }
         }, "← Retour"),
         h("div", { style: { display: "flex", gap: 8 } },
           onDelete && h("button", {
             onClick: onDelete,
-            style: { background: "rgba(224,85,85,.12)", border: "1px solid rgba(224,85,85,.35)", borderRadius: 10, padding: "9px 14px", color: C.red, cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }
+            style: { background: C.redPale, border: `1px solid ${C.redBord}`, borderRadius: 10, padding: "9px 14px", color: C.red, cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }
           }, "🗑 Supprimer"),
           h("button", {
             onClick: () => {
@@ -74,18 +82,18 @@ function VueImpression({
                 signalerErreur(e);
               }
             },
-            style: { background: `linear-gradient(135deg,${C.gold},${C.goldD})`, border: "none", borderRadius: 10, padding: "9px 16px", color: C.navy, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }
+            style: { background: C.navy, border: "none", borderRadius: 10, padding: "10px 16px", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }
           }, "⤓ PDF"),
           h("button", {
             onClick: () => window.print(),
             title: "Imprimer",
-            style: { background: "rgba(255,255,255,.08)", border: "none", borderRadius: 10, padding: "9px 12px", color: C.gray, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }
+            style: { background: C.surface, border: "none", borderRadius: 10, padding: "9px 12px", color: C.gray, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }
           }, "🖨")
         )
       ),
 
       // ── Brouillon : on ne l'envoie pas, on l'émet d'abord ───
-      !emise && h("div", { className: "sans-impression", style: { background: "rgba(224,144,48,.1)", border: "1px solid rgba(224,144,48,.35)", borderRadius: 12, padding: 13, marginBottom: 12 } },
+      !emise && h("div", { className: "sans-impression", style: { background: C.orangePale, border: `1px solid ${C.orangeBord}`, borderRadius: 12, padding: 13, marginBottom: 12 } },
         h("div", { style: { fontSize: 13, fontWeight: 800, color: C.orange, marginBottom: 5 } }, "Brouillon — pas encore de numéro"),
         h("div", { style: { fontSize: 12, color: C.gray, lineHeight: 1.6, marginBottom: 10 } },
           "Cette facture grossit automatiquement à chaque séance pointée. Émettez-la pour lui attribuer un numéro définitif et figer son montant — c'est la version que vous pouvez envoyer et déclarer."),
@@ -95,7 +103,7 @@ function VueImpression({
           : h(BtnPrimary, { label: emission ? "Émission…" : "🧾 Émettre la facture", onClick: emettre, disabled: emission, full: true })
       ),
 
-      emise && h("div", { className: "sans-impression", style: { background: "rgba(76,175,125,.1)", border: "1px solid rgba(76,175,125,.3)", borderRadius: 12, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: C.green, lineHeight: 1.6 } },
+      emise && h("div", { className: "sans-impression", style: { background: C.greenPale, border: `1px solid ${C.greenBord}`, borderRadius: 12, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: C.green, lineHeight: 1.6 } },
         `Facture émise le ${fmtDateLongue(facture.dateEmission)} sous le numéro ${facture.numero}. Son montant est figé.`),
 
       h(PanneauEnvoi, {
@@ -149,7 +157,17 @@ function VueImpression({
             )
           ),
           h("tbody", null,
-            matieresGroupees.length > 0
+            forfait
+              ? h("tr", null,
+                  h("td", { style: { padding: "12px" } },
+                    h("div", { style: { fontWeight: 600, color: "#222" } }, forfait),
+                    h("div", { style: { fontSize: 11, color: "#888", marginTop: 2 } },
+                      `Forfait tout compris${periodeForfait ? ` · ${periodeForfait.toLowerCase()}` : ""}` +
+                      (eleve.niveau ? ` · niveau ${eleve.niveau}` : ""))),
+                  h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, "1"),
+                  h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, euros(facture.montant)),
+                  h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(facture.montant)))
+            : matieresGroupees.length > 0
               ? matieresGroupees.map((g, i) => {
                   const total = parseFloat((g.dates.length * 2 * eleve.th).toFixed(2));
                   return h("tr", { key: g.matiere, style: { borderBottom: i < matieresGroupees.length - 1 ? "1px solid #eee" : "none" } },
@@ -160,8 +178,8 @@ function VueImpression({
                       h("div", { style: { fontSize: 11, color: "#999", marginTop: 4, lineHeight: 1.6 } },
                         g.dates.map(d => fmtDateCourt(d)).join(" · "))),
                     h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${g.dates.length * 2} h`),
-                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${eleve.th} €/h`),
-                    h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, `${total} €`));
+                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(eleve.th)}/h`),
+                    h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(total)));
                 })
               : h("tr", null, h("td", { colSpan: 4, style: { padding: "12px", color: "#888", textAlign: "center" } }, "Aucune séance"))
           )
@@ -169,7 +187,7 @@ function VueImpression({
 
         h("div", { style: { background: C.navy, borderRadius: 10, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
           h("span", { style: { color: "#fff", fontSize: 14, fontWeight: 700 } }, "NET À PAYER"),
-          h("span", { style: { color: C.gold, fontSize: 28, fontWeight: 800, fontFamily: FD } }, `${facture.montant} €`)
+          h("span", { style: { color: C.goldVif, fontSize: 28, fontWeight: 700, fontFamily: FD } }, euros(facture.montant))
         ),
         // Mention obligatoire en franchise de TVA : sans elle, la facture est irrégulière.
         h("div", { style: { fontSize: 11, color: "#666", textAlign: "right", marginBottom: 18, fontStyle: "italic" } },

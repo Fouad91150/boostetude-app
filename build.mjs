@@ -48,6 +48,13 @@ mkdirSync(join(racine, "dist"), { recursive: true });
 writeFileSync(join(racine, "dist", "index.html"), page, "utf8");
 
 for (const f of existsSync(join(racine, "public")) ? readdirSync(join(racine, "public")) : []) {
+  // Le service worker porte le numéro de version dans le nom de son cache : une
+  // mise à jour ouvre un cache neuf et efface l'ancien, au lieu de les mélanger.
+  if (f === "sw.js") {
+    const sw = readFileSync(join(racine, "public", f), "utf8").replaceAll("__VERSION__", pkg.version);
+    writeFileSync(join(racine, "dist", f), sw);
+    continue;
+  }
   copyFileSync(join(racine, "public", f), join(racine, "dist", f));
 }
 

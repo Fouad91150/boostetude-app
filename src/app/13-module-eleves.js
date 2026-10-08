@@ -84,7 +84,7 @@ function ModuleEleves({
       borderRadius: 10,
       fontSize: 13,
       fontWeight: 700,
-      boxShadow: "0 4px 16px rgba(0,0,0,.4)",
+      boxShadow: C.ombreForte,
       whiteSpace: "nowrap"
     }
   }, toast), /*#__PURE__*/React.createElement("div", {
@@ -98,19 +98,19 @@ function ModuleEleves({
     e: "👤",
     v: actifs.length,
     l: "Actifs",
-    c: C.gold
+    c: C.texte
   }, {
     e: "📋",
     v: eleves.length,
     l: "Total",
-    c: C.gray
+    c: C.texte
   }].map((s, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
-      background: "rgba(212,175,55,.08)",
-      border: "1px solid rgba(212,175,55,.15)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 12,
-      padding: "12px 8px",
+      padding: "13px 8px",
       textAlign: "center"
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -120,22 +120,30 @@ function ModuleEleves({
     }
   }, s.e), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 16,
-      fontWeight: 800,
+      fontSize: 22,
+      fontWeight: 700,
       color: s.c,
-      fontFamily: FD
+      fontFamily: FD,
+      lineHeight: 1.1
     }
   }, s.v), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 10,
+      fontSize: 12.5,
       color: C.gray,
-      fontWeight: 700,
-      textTransform: "uppercase"
+      fontWeight: 500
     }
   }, s.l)))), /*#__PURE__*/React.createElement("div", {
     style: {
-      position: "relative",
+      display: "flex",
+      gap: 8,
+      alignItems: "center",
       marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      flex: 1,
+      minWidth: 0
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -151,24 +159,18 @@ function ModuleEleves({
     placeholder: "Rechercher…",
     style: {
       width: "100%",
-      background: "rgba(255,255,255,.05)",
-      border: "1px solid rgba(212,175,55,.2)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 10,
-      padding: "10px 12px 10px 36px",
-      color: C.cream,
-      fontSize: 14,
+      padding: "11px 12px 11px 36px",
+      color: C.texte,
+      fontSize: 16,
       fontFamily: "inherit",
       outline: "none",
       boxSizing: "border-box"
     }
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "flex-end",
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement(BtnPrimary, {
-    label: "+ Ajouter",
+  })), /*#__PURE__*/React.createElement(BtnPrimary, {
+    label: "+ Élève",
     onClick: () => {
       setSel(null);
       setVue("form");
@@ -186,8 +188,8 @@ function ModuleEleves({
       setVue("fiche");
     },
     style: {
-      background: "rgba(255,255,255,.04)",
-      border: "1px solid rgba(212,175,55,.12)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 14,
       padding: 14,
       cursor: "pointer",
@@ -206,7 +208,7 @@ function ModuleEleves({
     style: {
       fontSize: 16,
       fontWeight: 800,
-      color: C.cream,
+      color: C.texte,
       fontFamily: FD
     }
   }, e.prenom, " ", e.nom), /*#__PURE__*/React.createElement("div", {
@@ -215,7 +217,7 @@ function ModuleEleves({
       color: C.gray,
       marginTop: 2
     }
-  }, e.niveau, " • ", e.th, "€/h • ", matieresDe(e.id))), /*#__PURE__*/React.createElement("span", {
+  }, e.niveau, " • ", euros(e.th), "/h • ", matieresDe(e.id))), /*#__PURE__*/React.createElement("span", {
     style: {
       color: C.gray,
       fontSize: 16

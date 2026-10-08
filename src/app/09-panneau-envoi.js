@@ -32,17 +32,21 @@ function PanneauEnvoi({
   const isF = type === "facture";
   const isA = type === "absence";
   const accent = isF ? C.green : isA ? C.blue : C.orange;
-  const bgBase = isF ? "rgba(76,175,125," : isA ? "rgba(74,158,221," : "rgba(224,144,48,";
+  const fondBase = isF ? C.greenPale : isA ? C.bluePale : C.orangePale;
+  const bordBase = isF ? C.greenBord : isA ? C.blueBord : C.orangeBord;
 
-  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil)
+  // Forfait de stage : le message annonce la prestation, pas un décompte de séances.
+  const forfait = (facture && facture.prestation) || null;
+
+  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil, forfait)
     : isA ? makeAbsenceEmail(eleve, mois, justifie)
     : makeRappelEmail(eleve, mois, montant, dates);
-  const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant, seuil)
+  const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant, seuil, forfait)
     : isA ? makeAbsenceSMS(eleve, mois, justifie)
     : makeRappelSMS(eleve, mois, montant);
   // WhatsApp accepte un texte plus long et un balisage léger : on lui donne la
   // version soignée plutôt que le SMS tronqué.
-  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil) : smsText;
+  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait) : smsText;
 
   const tel = (eleve.tel || "").replace(/\s/g, "");
   const hrefEmail = `mailto:${eleve.email}?subject=${encodeURIComponent(emailData.sujet)}&body=${encodeURIComponent(emailData.corps)}`;
@@ -101,14 +105,14 @@ function PanneauEnvoi({
   };
 
   // Un canal = un lien pour agir, un œil pour relire, un bouton pour copier.
-  const canal = (cle, libelle, href, texte, couleur, fond) => h("div", {
+  const canal = (cle, libelle, href, texte, couleur, fond, bord) => h("div", {
     key: cle,
     style: { display: "flex", gap: 4, flex: "1 1 100%", minWidth: 0 }
   },
     h("a", {
       href, target: "_blank", rel: "noopener noreferrer",
       style: {
-        flex: 1, background: `${fond}.15)`, border: `1px solid ${fond}.4)`, borderRadius: 10,
+        flex: 1, background: fond, border: `1px solid ${bord}`, borderRadius: 10,
         padding: "10px 6px", color: couleur, textDecoration: "none", fontSize: 13,
         fontWeight: 700, textAlign: "center", display: "block"
       }
@@ -116,7 +120,7 @@ function PanneauEnvoi({
     h("button", {
       onClick: () => setApercu(apercu === cle ? null : cle),
       style: {
-        background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.1)",
+        background: C.surface, border: `1px solid ${C.bord}`,
         borderRadius: 10, padding: "10px 8px", color: C.gray, cursor: "pointer",
         fontSize: 11, fontWeight: 700, fontFamily: "inherit"
       }
@@ -125,8 +129,8 @@ function PanneauEnvoi({
       onClick: () => copier(texte, cle),
       title: "Copier le message",
       style: {
-        background: copie === cle ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.07)",
-        border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "10px 8px",
+        background: copie === cle ? C.greenPale : C.surface,
+        border: `1px solid ${C.bord}`, borderRadius: 10, padding: "10px 8px",
         color: copie === cle ? C.green : C.gray, cursor: "pointer",
         fontSize: 11, fontWeight: 700, fontFamily: "inherit"
       }
@@ -136,7 +140,7 @@ function PanneauEnvoi({
 
   return h("div", {
     style: {
-      background: `${bgBase}.07)`, border: `1px solid ${bgBase}.22)`,
+      background: fondBase, border: `1px solid ${bordBase}`,
       borderRadius: 12, padding: 12, marginTop: 8
     }
   },
@@ -148,8 +152,8 @@ function PanneauEnvoi({
         onClick: partagerPDF,
         disabled: envoiPDF,
         style: {
-          flex: 1, background: `linear-gradient(135deg,${C.gold},${C.goldD})`, border: "none",
-          borderRadius: 10, padding: "11px 10px", color: C.navy, fontSize: 13.5, fontWeight: 800,
+          flex: 1, background: C.navy, border: `1px solid ${C.navy}`,
+          borderRadius: 10, padding: "11px 10px", color: "#fff", fontSize: 13.5, fontWeight: 600,
           cursor: envoiPDF ? "wait" : "pointer", fontFamily: "inherit", opacity: envoiPDF ? 0.6 : 1
         }
       }, envoiPDF ? "Préparation…" : "📎 Partager la facture PDF"),
@@ -157,7 +161,7 @@ function PanneauEnvoi({
         onClick: telechargerPDF,
         title: "Télécharger le PDF",
         style: {
-          background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.12)",
+          background: C.surface, border: `1px solid ${C.bord}`,
           borderRadius: 10, padding: "11px 12px", color: C.gray, cursor: "pointer",
           fontSize: 13, fontFamily: "inherit"
         }
@@ -165,9 +169,9 @@ function PanneauEnvoi({
 
     apercu && h("div", {
       style: {
-        background: "rgba(0,0,0,.4)", borderRadius: 8, padding: 10, marginBottom: 8,
-        fontSize: 12, color: C.cream, lineHeight: 1.6, whiteSpace: "pre-line",
-        border: "1px solid rgba(255,255,255,.08)"
+        background: C.surface2, borderRadius: 10, padding: 10, marginBottom: 8,
+        fontSize: 12, color: C.texte, lineHeight: 1.6, whiteSpace: "pre-line",
+        border: `1px solid ${C.bord}`
       }
     },
       apercu === "email" && h("div", { style: { fontSize: 11, color: C.gold, fontWeight: 700, marginBottom: 6 } },
@@ -179,9 +183,9 @@ function PanneauEnvoi({
       }, "✕ Fermer")),
 
     h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
-      eleve.tel ? canal("wa", "💬 WhatsApp", hrefWA, waText, "#25d366", "rgba(37,211,102,") : null,
-      eleve.tel ? canal("sms", "📱 SMS", hrefSMS, smsText, C.blue, "rgba(74,158,221,") : null,
-      eleve.email ? canal("email", "✉️ Email", hrefEmail, emailData.corps, accent, bgBase) : null,
+      eleve.tel ? canal("wa", "💬 WhatsApp", hrefWA, waText, "#0b6b37", C.whatsappPale, C.whatsappBord) : null,
+      eleve.tel ? canal("sms", "📱 SMS", hrefSMS, smsText, C.blue, C.bluePale, C.blueBord) : null,
+      eleve.email ? canal("email", "✉️ Email", hrefEmail, emailData.corps, accent, fondBase, bordBase) : null,
       !eleve.email && !eleve.tel && h("div", { style: { fontSize: 12, color: C.gray, fontStyle: "italic" } },
         "Ajoutez un email ou un téléphone parent pour envoyer.")),
 

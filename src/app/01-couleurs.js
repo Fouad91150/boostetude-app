@@ -1,20 +1,52 @@
 // ─── COULEURS ────────────────────────────────────────────────
+// Thème clair. L'appel se fait debout, dans une salle éclairée, souvent près
+// d'une fenêtre : un fond blanc se lit dans ces conditions, un fond bleu nuit
+// non. Les couleurs de la charte — bleu nuit, or — deviennent donc des accents
+// (en-tête, boutons, chiffres) au lieu d'être le fond.
+//
+// Chaque état a trois teintes, comme sur une étiquette : la couleur franche pour
+// le texte, un fond pâle, un bord un peu plus soutenu. C'est ce trio qui rend un
+// badge lisible sans l'alourdir.
 const C = {
-  navy: "#0a1428",
-  gold: "#d4af37",
-  cream: "#fafaf7",
-  navyL: "#1a2540",
-  navyM: "#0f1e38",
-  goldD: "#b8962e",
-  red: "#e05555",
-  green: "#4caf7d",
-  orange: "#e09030",
-  gray: "#8892a4",
-  blue: "#4a9edd"
+  // ── Marque ──
+  navy: "#0a1428",      // bleu nuit de la charte : en-tête, boutons, texte sur or
+  navyM: "#14233f",
+  navyL: "#1d3557",
+  navyPale: "#e8edf5",
+  gold: "#9a7a16",      // l'or, assombri : lisible sur blanc
+  goldVif: "#d4af37",   // l'or de la charte : aplats et dégradés sur fond sombre
+  goldD: "#7e6113",
+  goldPale: "#faf3dd",
+  goldBord: "#e6d6a2",
+
+  // ── Surfaces ──
+  fond: "#f3f4f8",
+  surface: "#ffffff",
+  surface2: "#f8fafc",  // en-têtes de tableau, encarts, champs au repos
+  bord: "#e3e6ec",
+  bordFort: "#ced4df",
+  voile: "rgba(18,28,46,.45)",   // derrière une fenêtre modale
+
+  // ── Texte ──
+  texte: "#121c2e",
+  gray: "#5a6679",
+  grisClair: "#8c95a4",
+
+  // ── États ──
+  green: "#2f7d5b", greenPale: "#e5f2eb", greenBord: "#bfe3cb",
+  orange: "#a8620f", orangePale: "#faeedb", orangeBord: "#f2ddc0",
+  red: "#b23a3a", redPale: "#f9e6e5", redBord: "#f0c4c1",
+  blue: "#4057a0", bluePale: "#e8ecf8", blueBord: "#ccd9f7",
+  whatsapp: "#25d366", whatsappPale: "#e9f9f0", whatsappBord: "#a5e5c2",
+
+  // ── Relief ──
+  ombre: "0 1px 2px rgba(18,28,46,.05),0 6px 18px rgba(18,28,46,.05)",
+  ombreForte: "0 10px 34px rgba(18,28,46,.16)"
 };
-// Police d'usage quotidien (chargée via Google Fonts dans index.html).
-// NB: VueImpression (facture imprimée/PDF) garde volontairement "Georgia,serif" — esthétique papier distincte.
-const FD = "'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+// Titres et chiffres : une serif, comme sur les documents de la maison.
+const FD = "'Playfair Display',Georgia,'Times New Roman',serif";
+// Texte courant : posé sur <body> et hérité partout — rien à répéter.
+const FT = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
 const NIVEAUX = ["CP", "CE1", "CE2", "CM1", "CM2", "6ème", "5ème", "4ème", "3ème", "2nde", "1ère", "Terminale"];
 // Liste fermée pour éviter les fautes de saisie/casse (ex. "physique" vs "Physique-Chimie")
 // qui empêcheraient la facture de regrouper correctement les séances par matière.

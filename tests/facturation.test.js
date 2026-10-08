@@ -91,8 +91,9 @@ describe("Facture", () => {
       eleve: eleveType, parametres: parametresComplets, onClose() {}, onEmettre() {}
     });
     assert.ok(contient(html, "8 h"), "4 séances de 2 h font 8 heures");
-    assert.ok(contient(html, "12.5 €/h"));
-    assert.ok(contient(html, "100 €"));
+    // Présentation comptable française : virgule décimale et deux décimales.
+    assert.ok(contient(html, "12,50 €/h"));
+    assert.ok(contient(html, "100,00 €"));
   });
 });
 

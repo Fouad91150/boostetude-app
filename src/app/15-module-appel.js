@@ -115,8 +115,8 @@ function ModuleAppel({
   const groupesVides = groupes.filter(g => (g.eids || []).length === 0);
   if (etape === "groupes") return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "rgba(212,175,55,.08)",
-      border: "1px solid rgba(212,175,55,.2)",
+      background: C.navyPale,
+      border: `1px solid ${C.bord}`,
       borderRadius: 14,
       padding: 14,
       marginBottom: 16
@@ -130,15 +130,15 @@ function ModuleAppel({
     style: {
       width: "100%",
       background: "transparent",
-      border: "1px solid rgba(212,175,55,.3)",
+      border: `1px solid ${C.bord}`,
       borderRadius: 8,
       padding: "10px 12px",
-      color: C.cream,
+      color: C.texte,
       fontSize: 16,
       fontFamily: "inherit",
       outline: "none",
       boxSizing: "border-box",
-      colorScheme: "dark"
+      colorScheme: "light"
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -188,8 +188,8 @@ function ModuleAppel({
       onClick: () => ouvrir(g),
       style: {
         flex: 1,
-        background: fait ? "rgba(76,175,125,.08)" : "rgba(255,255,255,.04)",
-        border: fait ? "1.5px solid rgba(76,175,125,.4)" : "1px solid rgba(255,255,255,.1)",
+        background: fait ? C.greenPale : C.surface,
+        border: fait ? `1.5px solid ${C.greenBord}` : `1px solid ${C.bord}`,
         borderRadius: 14,
         padding: 16,
         cursor: "pointer",
@@ -206,7 +206,7 @@ function ModuleAppel({
       style: {
         fontSize: 17,
         fontWeight: 800,
-        color: C.cream,
+        color: C.texte,
         fontFamily: FD,
         marginBottom: 4
       }
@@ -228,7 +228,7 @@ function ModuleAppel({
         fontSize: 11,
         fontWeight: 700,
         color: C.green,
-        background: "rgba(76,175,125,.15)",
+        background: C.greenPale,
         padding: "4px 10px",
         borderRadius: 20
       }
@@ -240,8 +240,8 @@ function ModuleAppel({
     }, "›"))), isAdmin && /*#__PURE__*/React.createElement("button", {
       onClick: () => setGrpForm(g),
       style: {
-        background: "rgba(255,255,255,.06)",
-        border: "1px solid rgba(255,255,255,.1)",
+        background: C.surface,
+        border: `1px solid ${C.bord}`,
         borderRadius: 14,
         padding: "0 14px",
         color: C.gold,
@@ -259,14 +259,14 @@ function ModuleAppel({
       groupesVides.map(g => h("div", { key: g.id, style: { display: "flex", gap: 8 } },
         h("button", {
           onClick: () => ouvrir(g),
-          style: { flex: 1, background: "rgba(255,255,255,.02)", border: "1px dashed rgba(255,255,255,.12)", borderRadius: 12, padding: "12px 14px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }
+          style: { flex: 1, background: C.surface, border: `1px dashed ${C.bord}`, borderRadius: 12, padding: "12px 14px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }
         },
           h("div", { style: { fontSize: 14, fontWeight: 700, color: C.gray, fontFamily: FD } },
-            g.nom, h("span", { style: { fontSize: 10.5, fontWeight: 700, color: "rgba(212,175,55,.6)", marginLeft: 8 } }, g.matiere)),
-          h("div", { style: { fontSize: 11.5, color: "rgba(255,255,255,.3)", marginTop: 2 } }, horaireLabel(g), " • aucun inscrit")),
+            g.nom, h("span", { style: { fontSize: 10.5, fontWeight: 700, color: C.gold, marginLeft: 8 } }, g.matiere)),
+          h("div", { style: { fontSize: 11.5, color: C.grisClair, marginTop: 2 } }, horaireLabel(g), " • aucun inscrit")),
         isAdmin && h("button", {
           onClick: () => setGrpForm(g),
-          style: { background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 12, padding: "0 13px", color: "rgba(212,175,55,.6)", cursor: "pointer", fontSize: 14, fontFamily: "inherit" }
+          style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "0 13px", color: C.gold, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }
         }, "✏️"))))),
   groupes.length === 0 && isAdmin && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -352,15 +352,15 @@ function ModuleAppel({
       // L'appel est fait : on le dit en une ligne et on passe à la suite.
       h("div", {
         style: {
-          background: enAttente ? "rgba(224,150,60,.12)" : "rgba(76,175,125,.1)",
-          border: `1px solid ${enAttente ? "rgba(224,150,60,.4)" : "rgba(76,175,125,.35)"}`,
+          background: enAttente ? "rgba(224,150,60,.12)" : C.greenPale,
+          border: `1px solid ${enAttente ? "rgba(224,150,60,.4)" : C.greenBord}`,
           borderRadius: 12, padding: "12px 14px", marginBottom: 18,
           display: "flex", alignItems: "center", gap: 10
         }
       },
         h("span", { style: { fontSize: 20 } }, enAttente ? "📡" : "✅"),
         h("div", { style: { flex: 1 } },
-          h("div", { style: { fontSize: 14, fontWeight: 800, color: C.cream, fontFamily: FD } },
+          h("div", { style: { fontSize: 14, fontWeight: 800, color: C.texte, fontFamily: FD } },
             enAttente ? "Appel gardé sur l'appareil" : "Appel enregistré"),
           h("div", { style: { fontSize: 12, color: C.gray, marginTop: 2 } },
             `${grp.nom} • ${new Date(date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} • `,
@@ -376,7 +376,7 @@ function ModuleAppel({
         ? h("div", { style: { textAlign: "center", padding: "20px 0 28px", color: C.gray, fontSize: 13 } },
             "Personne n'était présent : il n'y a pas de compte rendu à écrire.")
         : h("div", null,
-            h("div", { style: { fontSize: 20, fontWeight: 800, color: C.cream, fontFamily: FD, marginBottom: 4 } },
+            h("div", { style: { fontSize: 20, fontWeight: 800, color: C.texte, fontFamily: FD, marginBottom: 4 } },
               "Qu'avez-vous travaillé ?"),
             h("div", { style: { fontSize: 13, color: C.gray, marginBottom: 16, lineHeight: 1.5 } },
               "Deux lignes suffisent. Elles valent pour les ", presentsIds.length, " élève",
@@ -384,7 +384,7 @@ function ModuleAppel({
               " et nourrissent le bilan envoyé aux parents."),
 
             dejaEcrits > 0 && h("div", {
-              style: { background: "rgba(212,175,55,.1)", border: "1px solid rgba(212,175,55,.3)", borderRadius: 10, padding: "9px 12px", marginBottom: 14, fontSize: 12.5, color: C.cream }
+              style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 10, padding: "9px 12px", marginBottom: 14, fontSize: 12.5, color: C.texte }
             }, `📝 Un compte rendu existe déjà pour cette séance. L'enregistrer à nouveau le remplacera.`),
 
             suggestions.length > 0 && h("div", { style: { marginBottom: 12 } },
@@ -393,7 +393,7 @@ function ModuleAppel({
                 suggestions.map(s => h("button", {
                   key: s,
                   onClick: () => ajouterNotion(s),
-                  style: { background: "rgba(212,175,55,.1)", border: "1px solid rgba(212,175,55,.3)", borderRadius: 16, padding: "5px 11px", color: C.gold, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }
+                  style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 16, padding: "5px 11px", color: C.navyL, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }
                 }, "+ ", s)))),
 
             h(InputArea, {
@@ -427,7 +427,7 @@ function ModuleAppel({
                 style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", padding: "4px 0" }
               }, "Détailler élève par élève →"))),
 
-      h("div", { style: { marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.08)" } },
+      h("div", { style: { marginTop: 18, paddingTop: 16, borderTop: `1px solid ${C.bord}` } },
         h(BtnSecondary, {
           label: presentsIds.length === 0 ? "← Retour aux groupes" : "Passer pour cette fois",
           onClick: finir,
@@ -468,8 +468,8 @@ function ModuleAppel({
     key: k,
     onClick: () => setOnglet(k),
     style: {
-      background: onglet === k ? C.gold : "rgba(255,255,255,.08)",
-      color: onglet === k ? C.navy : C.gray,
+      background: onglet === k ? C.navy : C.surface,
+      color: onglet === k ? "#fff" : C.gray,
       border: "none",
       borderRadius: 20,
       padding: "6px 14px",
@@ -498,8 +498,8 @@ function ModuleAppel({
       display: "flex",
       alignItems: "center",
       gap: 8,
-      background: "rgba(255,255,255,.04)",
-      border: "1px solid rgba(212,175,55,.15)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 10,
       padding: "10px 14px",
       marginBottom: 14
@@ -517,11 +517,11 @@ function ModuleAppel({
       flex: 1,
       background: "transparent",
       border: "none",
-      color: C.cream,
+      color: C.texte,
       fontSize: 14,
       fontFamily: "inherit",
       outline: "none",
-      colorScheme: "dark"
+      colorScheme: "light"
     }
   })), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -533,7 +533,7 @@ function ModuleAppel({
   }, [[nbP, "✅", "Présents", C.green], [nbAJ, "📋", "Justifiés", C.orange], [nbAN, "❌", "Absents", C.red]].map(([v, e, l, cl], i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
-      background: "rgba(255,255,255,.05)",
+      background: C.surface,
       borderRadius: 10,
       padding: "10px 6px",
       textAlign: "center"
@@ -572,8 +572,8 @@ function ModuleAppel({
     },
     style: {
       flex: 1,
-      background: "rgba(76,175,125,.1)",
-      border: "1px solid rgba(76,175,125,.3)",
+      background: C.greenPale,
+      border: `1px solid ${C.greenBord}`,
       borderRadius: 10,
       padding: 10,
       color: C.green,
@@ -592,8 +592,8 @@ function ModuleAppel({
     },
     style: {
       flex: 1,
-      background: "rgba(224,85,85,.1)",
-      border: "1px solid rgba(224,85,85,.3)",
+      background: C.redPale,
+      border: `1px solid ${C.redBord}`,
       borderRadius: 10,
       padding: 10,
       color: C.red,
@@ -635,7 +635,7 @@ function ModuleAppel({
       left: 0,
       right: 0,
       padding: "12px 16px",
-      background: `linear-gradient(to top,${C.navy} 70%,transparent)`,
+      background: `linear-gradient(to top,${C.fond} 72%,transparent)`,
       zIndex: 200
     }
   }, /*#__PURE__*/React.createElement("button", {
@@ -643,16 +643,16 @@ function ModuleAppel({
     disabled: enregistrement,
     style: {
       width: "100%",
-      background: `linear-gradient(135deg,${C.gold},${C.goldD})`,
+      background: C.navy,
       border: "none",
-      borderRadius: 14,
+      borderRadius: 12,
       padding: 16,
-      color: C.navy,
+      color: "#fff",
       fontSize: 16,
-      fontWeight: 800,
+      fontWeight: 600,
       cursor: enregistrement ? "not-allowed" : "pointer",
       fontFamily: "inherit",
-      boxShadow: "0 4px 20px rgba(212,175,55,.3)",
+      boxShadow: C.ombreForte,
       opacity: enregistrement ? .7 : 1
     }
   }, enregistrement ? "💾 Enregistrement…" : `💾 Enregistrer • ${nbP}/${(grp.eids || []).length} présents`))), onglet === "histo" && /*#__PURE__*/React.createElement("div", {
@@ -680,8 +680,8 @@ function ModuleAppel({
     return /*#__PURE__*/React.createElement("div", {
       key: d,
       style: {
-        background: "rgba(255,255,255,.04)",
-        border: "1px solid rgba(212,175,55,.12)",
+        background: C.surface,
+        border: `1px solid ${C.bord}`,
         borderRadius: 14,
         padding: 14
       }
@@ -689,7 +689,7 @@ function ModuleAppel({
       style: {
         fontSize: 14,
         fontWeight: 700,
-        color: C.cream,
+        color: C.texte,
         marginBottom: 8
       }
     }, new Date(d).toLocaleDateString("fr-FR", {
@@ -769,8 +769,8 @@ function ModuleAppel({
     return /*#__PURE__*/React.createElement("div", {
       key: eid,
       style: {
-        background: "rgba(255,255,255,.04)",
-        border: `1px solid ${justifie ? "rgba(224,144,48,.3)" : "rgba(224,85,85,.3)"}`,
+        background: C.surface,
+        border: `1px solid ${justifie ? C.orangeBord : C.redBord}`,
         borderRadius: 14,
         padding: 14
       }
@@ -791,7 +791,7 @@ function ModuleAppel({
       style: {
         fontSize: 15,
         fontWeight: 800,
-        color: C.cream,
+        color: C.texte,
         fontFamily: FD
       }
     }, e.prenom, " ", e.nom), /*#__PURE__*/React.createElement("div", {
@@ -804,7 +804,7 @@ function ModuleAppel({
         fontSize: 11,
         fontWeight: 700,
         color: justifie ? C.orange : C.red,
-        background: justifie ? "rgba(224,144,48,.15)" : "rgba(224,85,85,.15)",
+        background: justifie ? C.orangePale : C.redPale,
         padding: "3px 8px",
         borderRadius: 20,
         whiteSpace: "nowrap"

@@ -34,8 +34,8 @@ function BlocConformite({ parametres }) {
   const ok = manquants.length === 0;
   return h("div", {
     style: {
-      background: ok ? "rgba(76,175,125,.1)" : "rgba(224,85,85,.1)",
-      border: `1px solid ${ok ? "rgba(76,175,125,.35)" : "rgba(224,85,85,.35)"}`,
+      background: ok ? C.greenPale : C.redPale,
+      border: `1px solid ${ok ? C.greenBord : C.redBord}`,
       borderRadius: 12, padding: 13, marginBottom: 16
     }
   },
@@ -69,7 +69,7 @@ function OngletEntreprise({ parametres, onSave }) {
   return h("div", null,
     toast && h("div", {
       className: "fx-pop-in",
-      style: { position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", zIndex: 900, background: C.green, color: "#fff", padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 700, boxShadow: "0 4px 16px rgba(0,0,0,.4)" }
+      style: { position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", zIndex: 900, background: C.green, color: "#fff", padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 700, boxShadow: C.ombreForte }
     }, toast),
 
     h(BlocConformite, { parametres: f }),
@@ -84,7 +84,7 @@ function OngletEntreprise({ parametres, onSave }) {
       h(InputText, { label: "Code APE", value: f.ape || "", onChange: v => set("ape", v), placeholder: "85.59B" })
     ),
 
-    h("div", { style: { borderTop: "1px solid rgba(212,175,55,.1)", paddingTop: 14, marginTop: 4 } },
+    h("div", { style: { borderTop: `1px solid ${C.bord}`, paddingTop: 14, marginTop: 4 } },
       h(Lbl, { text: "Adresse" }),
       h(InputText, { label: "Rue", value: f.adresse || "", onChange: v => set("adresse", v), placeholder: "7 avenue des Meuniers" }),
       h("div", { style: { display: "grid", gridTemplateColumns: "1fr 2fr", gap: "0 12px" } },
@@ -97,7 +97,7 @@ function OngletEntreprise({ parametres, onSave }) {
       )
     ),
 
-    h("div", { style: { borderTop: "1px solid rgba(212,175,55,.1)", paddingTop: 14 } },
+    h("div", { style: { borderTop: `1px solid ${C.bord}`, paddingTop: 14 } },
       h(Lbl, { text: "Coordonnées bancaires" }),
       h("div", { style: { fontSize: 11, color: C.gray, marginBottom: 10, lineHeight: 1.6 } },
         "Enregistrées dans la base, accessibles à vous seul. Elles n'apparaissent que sur les factures non réglées, jamais dans le code du site."),
@@ -106,7 +106,7 @@ function OngletEntreprise({ parametres, onSave }) {
       h(InputText, { label: "BIC", value: f.bic || "", onChange: v => set("bic", v) })
     ),
 
-    h("div", { style: { borderTop: "1px solid rgba(212,175,55,.1)", paddingTop: 14 } },
+    h("div", { style: { borderTop: `1px solid ${C.bord}`, paddingTop: 14 } },
       h(Lbl, { text: "Rythme de facturation" }),
       h(InputText, {
         label: "Facturer toutes les … séances",
@@ -158,7 +158,7 @@ function OngletLivreRecettes({ factures, eleves }) {
   };
 
   return h("div", null,
-    h("div", { style: { background: "rgba(212,175,55,.08)", border: "1px solid rgba(212,175,55,.2)", borderRadius: 12, padding: 13, marginBottom: 16, fontSize: 12, color: C.gray, lineHeight: 1.65 } },
+    h("div", { style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 12, padding: 13, marginBottom: 16, fontSize: 12, color: C.gray, lineHeight: 1.65 } },
       h("div", { style: { fontSize: 13, fontWeight: 800, color: C.gold, marginBottom: 5 } }, "Livre des recettes"),
       "Registre chronologique des encaissements que tout micro-entrepreneur doit tenir. Il se remplit tout seul : une ligne par facture marquée payée."),
 
@@ -169,7 +169,7 @@ function OngletLivreRecettes({ factures, eleves }) {
         { e: "💰", v: total.toFixed(2).replace(".", ",") + "€", l: "Recettes", c: C.green }
       ].map((s, i) => h("div", {
         key: i,
-        style: { background: "rgba(212,175,55,.08)", border: "1px solid rgba(212,175,55,.15)", borderRadius: 12, padding: "12px 8px", textAlign: "center" }
+        style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "13px 8px", textAlign: "center" }
       },
         h("div", { style: { fontSize: 18, marginBottom: 2 } }, s.e),
         h("div", { style: { fontSize: 15, fontWeight: 800, color: s.c, fontFamily: FD } }, s.v),
@@ -184,10 +184,10 @@ function OngletLivreRecettes({ factures, eleves }) {
           h("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 } },
             encaissees.map(f => h("div", {
               key: f.id,
-              style: { background: "rgba(255,255,255,.04)", border: "1px solid rgba(212,175,55,.12)", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
+              style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
             },
               h("div", { style: { minWidth: 0 } },
-                h("div", { style: { fontSize: 13, fontWeight: 700, color: C.cream } }, f.numero, " · ", nomDe(f.eleveId)),
+                h("div", { style: { fontSize: 13, fontWeight: 700, color: C.texte } }, f.numero, " · ", nomDe(f.eleveId)),
                 h("div", { style: { fontSize: 11, color: C.gray } },
                   new Date(f.datePaiement + "T00:00:00").toLocaleDateString("fr-FR"), " · ", f.mode)),
               h("span", { style: { fontSize: 14, fontWeight: 800, color: C.green, fontFamily: FD, whiteSpace: "nowrap" } }, f.montant, "€")))),
@@ -226,9 +226,9 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
   };
 
   const bloc = (titre, texte, bouton) => h("div", {
-    style: { background: "rgba(255,255,255,.04)", border: "1px solid rgba(212,175,55,.15)", borderRadius: 12, padding: 14, marginBottom: 12 }
+    style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: 14, marginBottom: 12 }
   },
-    h("div", { style: { fontSize: 13, fontWeight: 800, color: C.cream, marginBottom: 5 } }, titre),
+    h("div", { style: { fontSize: 13, fontWeight: 800, color: C.texte, marginBottom: 5 } }, titre),
     h("div", { style: { fontSize: 12, color: C.gray, lineHeight: 1.65, marginBottom: 11 } }, texte),
     bouton);
 
@@ -241,7 +241,7 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
       "Tableau ouvrable dans Excel : élèves, niveaux, tarifs et contacts des parents.",
       h(BtnSecondary, { label: "⬇️ Exporter les élèves", onClick: exportEleves })),
 
-    h("div", { style: { background: "rgba(74,158,221,.07)", border: "1px solid rgba(74,158,221,.25)", borderRadius: 12, padding: 14, fontSize: 12, color: C.gray, lineHeight: 1.7 } },
+    h("div", { style: { background: C.bluePale, border: `1px solid ${C.blueBord}`, borderRadius: 12, padding: 14, fontSize: 12, color: C.gray, lineHeight: 1.7 } },
       h("div", { style: { fontSize: 13, fontWeight: 800, color: C.blue, marginBottom: 6 } }, "Données personnelles et RGPD"),
       "Cette application traite des données de mineurs : elles méritent le même soin que les copies. Ce qu'il faut retenir :",
       h("ul", { style: { margin: "8px 0 0 18px", padding: 0 } },
@@ -252,26 +252,29 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
   );
 }
 
-function ModuleReglages({ parametres, eleves, groupes, appels, factures, onSaveParametres, onExportComplet }) {
+function ModuleReglages({ parametres, eleves, groupes, appels, factures, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel }) {
   const [onglet, setOnglet] = useState("entreprise");
   const onglets = [
     { k: "entreprise", l: "🏛 Entreprise" },
+    { k: "profs", l: "👥 Professeurs" },
     { k: "recettes", l: "📒 Recettes" },
     { k: "donnees", l: "🗄 Données" }
   ];
   return h("div", null,
-    h("div", { style: { display: "flex", gap: 8, marginBottom: 14 } },
+    h("div", { style: { display: "flex", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 } },
       onglets.map(({ k, l }) => h("button", {
         key: k,
         onClick: () => setOnglet(k),
         style: {
-          background: onglet === k ? C.gold : "rgba(255,255,255,.08)",
-          color: onglet === k ? C.navy : C.gray,
-          border: "none", borderRadius: 20, padding: "6px 14px",
-          fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit"
+          background: onglet === k ? C.navy : C.surface,
+          color: onglet === k ? "#fff" : C.gray,
+          border: `1px solid ${onglet === k ? C.navy : C.bord}`, borderRadius: 999,
+          padding: "6px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+          fontFamily: "inherit", whiteSpace: "nowrap"
         }
       }, l))),
     onglet === "entreprise" && h(OngletEntreprise, { parametres, onSave: onSaveParametres }),
+    onglet === "profs" && h(OngletProfesseurs, { profs, groupes, appels, onSaveTaux, onSaveTel }),
     onglet === "recettes" && h(OngletLivreRecettes, { factures, eleves }),
     onglet === "donnees" && h(OngletDonnees, { eleves, groupes, appels, factures, onExportComplet })
   );

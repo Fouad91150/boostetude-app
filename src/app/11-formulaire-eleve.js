@@ -58,7 +58,7 @@ function FormulaireEleve({
     style: {
       fontSize: 20,
       fontWeight: 800,
-      color: C.cream,
+      color: C.texte,
       fontFamily: FD,
       marginBottom: 20
     }
@@ -85,8 +85,8 @@ function FormulaireEleve({
     options: NIVEAUX
   }), /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "rgba(212,175,55,.08)",
-      border: "1px solid rgba(212,175,55,.15)",
+      background: C.navyPale,
+      border: `1px solid ${C.bord}`,
       borderRadius: 10,
       padding: "10px 12px",
       marginBottom: 14,
@@ -106,7 +106,7 @@ function FormulaireEleve({
       color: C.gold,
       fontFamily: FD
     }
-  }, th, "€/h")), /*#__PURE__*/React.createElement(Lbl, {
+  }, euros(th), "/h")), /*#__PURE__*/React.createElement(Lbl, {
     text: "Groupes suivis (matières)"
   }), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -123,8 +123,8 @@ function FormulaireEleve({
         display: "flex",
         alignItems: "center",
         gap: 10,
-        background: checked ? "rgba(212,175,55,.12)" : "rgba(255,255,255,.04)",
-        border: checked ? `1px solid ${C.gold}` : "1px solid rgba(255,255,255,.08)",
+        background: checked ? C.navyPale : C.surface,
+        border: checked ? `1px solid ${C.gold}` : `1px solid ${C.bord}`,
         borderRadius: 10,
         padding: "10px 12px",
         cursor: "pointer"
@@ -146,7 +146,7 @@ function FormulaireEleve({
       style: {
         fontSize: 13,
         fontWeight: 700,
-        color: C.cream
+        color: C.texte
       }
     }, g.matiere, " — ", g.nom), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -162,7 +162,7 @@ function FormulaireEleve({
     }
   }, "Aucun groupe créé pour l'instant.")), /*#__PURE__*/React.createElement("div", {
     style: {
-      borderTop: "1px solid rgba(212,175,55,.1)",
+      borderTop: `1px solid ${C.bord}`,
       paddingTop: 14,
       marginBottom: 4
     }
@@ -187,7 +187,7 @@ function FormulaireEleve({
     type: "email"
   })), /*#__PURE__*/React.createElement("div", {
     style: {
-      borderTop: "1px solid rgba(212,175,55,.1)",
+      borderTop: `1px solid ${C.bord}`,
       paddingTop: 14,
       marginBottom: 4
     }

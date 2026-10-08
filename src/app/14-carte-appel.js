@@ -6,16 +6,16 @@ function CarteAppel({
 }) {
   const colors = {
     present: {
-      bg: "rgba(76,175,125,.12)",
-      bd: "rgba(76,175,125,.4)"
+      bg: C.greenPale,
+      bd: C.greenBord
     },
     absent_j: {
-      bg: "rgba(224,144,48,.12)",
-      bd: "rgba(224,144,48,.4)"
+      bg: C.orangePale,
+      bd: C.orangeBord
     },
     absent_nj: {
-      bg: "rgba(224,85,85,.12)",
-      bd: "rgba(224,85,85,.4)"
+      bg: C.redPale,
+      bd: C.redBord
     }
   };
   const s = colors[statut] || colors.present;
@@ -45,7 +45,7 @@ function CarteAppel({
     style: {
       fontSize: 17,
       fontWeight: 800,
-      color: C.cream,
+      color: C.texte,
       fontFamily: FD
     }
   }, eleve.prenom, " ", eleve.nom), /*#__PURE__*/React.createElement("div", {
@@ -67,8 +67,8 @@ function CarteAppel({
     key: k,
     onClick: () => onChange(k),
     style: {
-      background: statut === k ? `${cl}22` : "rgba(255,255,255,.05)",
-      border: statut === k ? `2px solid ${cl}` : "1px solid rgba(255,255,255,.1)",
+      background: statut === k ? `${cl}22` : C.surface,
+      border: statut === k ? `2px solid ${cl}` : `1px solid ${C.bord}`,
       borderRadius: 10,
       padding: "10px 4px",
       cursor: "pointer",

@@ -24,9 +24,9 @@ const signalerSucces = t => Signal.emettre("succes", t);
 const signalerInfo = t => Signal.emettre("info", t);
 
 const APPARENCE_BANDEAU = {
-  succes: { fond: "rgba(76,175,125,.16)", bord: "rgba(76,175,125,.5)", teinte: "#4caf7d", icone: "✅" },
-  erreur: { fond: "rgba(224,90,90,.16)", bord: "rgba(224,90,90,.5)", teinte: "#e05a5a", icone: "⚠️" },
-  info:   { fond: "rgba(212,175,55,.14)", bord: "rgba(212,175,55,.45)", teinte: "#d4af37", icone: "ℹ️" }
+  succes: { fond: C.greenPale, bord: C.greenBord, teinte: C.green, icone: "✅" },
+  erreur: { fond: C.redPale, bord: C.redBord, teinte: C.red, icone: "⚠️" },
+  info:   { fond: C.bluePale, bord: C.blueBord, teinte: C.blue, icone: "ℹ️" }
 };
 
 function PileBandeaux() {
@@ -60,12 +60,11 @@ function PileBandeaux() {
         pointerEvents: "auto", cursor: "pointer",
         background: a.fond, border: `1px solid ${a.bord}`, borderRadius: 12,
         padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10,
-        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-        boxShadow: "0 8px 24px rgba(0,0,0,.35)"
+        boxShadow: C.ombreForte
       }
     },
       h("span", { style: { fontSize: 16, lineHeight: "20px" } }, a.icone),
-      h("div", { style: { flex: 1, fontSize: 14, lineHeight: 1.45, color: C.cream, fontWeight: 600 } }, m.texte),
+      h("div", { style: { flex: 1, fontSize: 14, lineHeight: 1.45, color: C.texte, fontWeight: 600 } }, m.texte),
       h("span", { style: { color: a.teinte, fontSize: 18, lineHeight: "20px", fontWeight: 700 } }, "×"));
   }));
 }
@@ -81,10 +80,10 @@ function BandeauHorsLigne({ enLigne, enAttente }) {
     : `Envoi en attente — ${enAttente} appel${enAttente > 1 ? "s" : ""} à transmettre`;
   return h("div", {
     style: {
-      background: enLigne ? "rgba(212,175,55,.12)" : "rgba(224,150,60,.14)",
-      border: `1px solid ${enLigne ? "rgba(212,175,55,.35)" : "rgba(224,150,60,.4)"}`,
+      background: enLigne ? C.goldPale : C.orangePale,
+      border: `1px solid ${enLigne ? C.goldBord : C.orangeBord}`,
       borderRadius: 10, padding: "9px 12px", marginBottom: 12,
-      fontSize: 13, fontWeight: 600, color: C.cream,
+      fontSize: 13, fontWeight: 600, color: C.texte,
       display: "flex", alignItems: "center", gap: 8
     }
   }, h("span", null, enLigne ? "📤" : "📡"), h("span", null, texte));

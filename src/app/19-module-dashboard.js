@@ -46,8 +46,8 @@ function ModuleDashboard({
     key: m,
     onClick: () => setMois(m),
     style: {
-      background: mois === m ? C.gold : "rgba(255,255,255,.06)",
-      color: mois === m ? C.navy : C.gray,
+      background: mois === m ? C.navy : C.surface,
+      color: mois === m ? "#fff" : C.gray,
       border: "none",
       borderRadius: 20,
       padding: "5px 12px",
@@ -63,8 +63,8 @@ function ModuleDashboard({
     }
   }, absM.filter(a => a.s === "absent_nj").length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "rgba(224,85,85,.1)",
-      border: "1px solid rgba(224,85,85,.3)",
+      background: C.redPale,
+      border: `1px solid ${C.redBord}`,
       borderRadius: 12,
       padding: "12px 14px",
       marginBottom: 8,
@@ -89,8 +89,8 @@ function ModuleDashboard({
     }
   }, "Parents à notifier"))), impayes.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "rgba(224,144,48,.1)",
-      border: "1px solid rgba(224,144,48,.3)",
+      background: C.orangePale,
+      border: `1px solid ${C.orangeBord}`,
       borderRadius: 12,
       padding: "12px 14px",
       display: "flex",
@@ -123,12 +123,12 @@ function ModuleDashboard({
     e: "👤",
     v: actifs.length,
     l: "Élèves actifs",
-    c: C.gold
+    c: C.texte
   }, {
     e: "📚",
     v: groupes.length,
     l: "Groupes",
-    c: C.blue
+    c: C.texte
   }, {
     e: "💰",
     v: `${caMois}€`,
@@ -139,36 +139,35 @@ function ModuleDashboard({
     e: "✅",
     v: `${taux}%`,
     l: "Présence",
-    c: C.green
+    c: C.texte
   }].map((s, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
-      background: "rgba(255,255,255,.05)",
-      border: "1px solid rgba(255,255,255,.09)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 14,
       padding: "14px 12px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 24,
-      marginBottom: 6
+      fontSize: 15,
+      opacity: .75,
+      marginBottom: 4
     }
   }, s.e), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 26,
-      fontWeight: 800,
+      fontSize: 27,
+      fontWeight: 700,
       color: s.c,
       fontFamily: FD,
       lineHeight: 1
     }
   }, s.v), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 10,
-      fontWeight: 700,
+      fontSize: 13,
+      fontWeight: 500,
       color: C.gray,
-      letterSpacing: ".5px",
-      textTransform: "uppercase",
-      marginTop: 6
+      marginTop: 5
     }
   }, s.l), s.sub && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -178,19 +177,18 @@ function ModuleDashboard({
     }
   }, s.sub)))), /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "rgba(255,255,255,.04)",
-      border: "1px solid rgba(212,175,55,.12)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 16,
       padding: 16,
       marginBottom: 14
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12,
+      fontSize: 15,
       fontWeight: 700,
-      color: C.gold,
-      letterSpacing: "1px",
-      textTransform: "uppercase",
+      color: C.texte,
+      fontFamily: FD,
       marginBottom: 12
     }
   }, "📈 CA — 6 mois"), /*#__PURE__*/React.createElement("div", {
@@ -210,43 +208,45 @@ function ModuleDashboard({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        justifyContent: "flex-end",
         gap: 3
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 9,
-        color: isL ? C.gold : C.gray,
+        fontSize: 10,
+        color: isL ? C.texte : C.gray,
         fontWeight: isL ? 700 : 400
       }
     }, d.v > 0 ? `${d.v}€` : ""), /*#__PURE__*/React.createElement("div", {
+      // Une hauteur en pixels : le parent n'a pas de hauteur propre, et un
+      // pourcentage s'y réduisait à rien — les barres ne s'affichaient pas.
       style: {
         width: "100%",
-        borderRadius: "3px 3px 0 0",
-        background: isL ? `linear-gradient(to top,${C.goldD},${C.gold})` : "rgba(212,175,55,.25)",
-        height: `${Math.max(pct * 100, 4)}%`
+        borderRadius: "4px 4px 0 0",
+        background: isL ? C.navyL : C.navyPale,
+        height: Math.max(Math.round(pct * 68), 4)
       }
     }), /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 9,
-        color: isL ? C.gold : C.gray,
+        fontSize: 10,
+        color: isL ? C.texte : C.gray,
         fontWeight: isL ? 700 : 400
       }
     }, d.l));
   }))), /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "rgba(255,255,255,.04)",
-      border: "1px solid rgba(212,175,55,.12)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 16,
       padding: 16,
       marginBottom: 14
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12,
+      fontSize: 15,
       fontWeight: 700,
-      color: C.gold,
-      letterSpacing: "1px",
-      textTransform: "uppercase",
+      color: C.texte,
+      fontFamily: FD,
       marginBottom: 12
     }
   }, "👥 Présences — ", ml(mois)), actifs.map(e => {
@@ -275,7 +275,7 @@ function ModuleDashboard({
       style: {
         flex: 1,
         fontSize: 13,
-        color: C.cream,
+        color: C.texte,
         fontWeight: 600
       }
     }, e.prenom, " ", e.nom), /*#__PURE__*/React.createElement("span", {
@@ -293,7 +293,7 @@ function ModuleDashboard({
       style: {
         height: 4,
         borderRadius: 4,
-        background: "rgba(255,255,255,.08)"
+        background: C.surface
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -313,8 +313,8 @@ function ModuleDashboard({
     }
   }, "Aucun élève actif pour l'instant.")), absM.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "rgba(255,255,255,.04)",
-      border: "1px solid rgba(224,85,85,.2)",
+      background: C.surface,
+      border: `1px solid ${C.redBord}`,
       borderRadius: 16,
       padding: 16
     }
@@ -334,7 +334,7 @@ function ModuleDashboard({
       alignItems: "center",
       gap: 10,
       padding: "8px 0",
-      borderBottom: i < Math.min(absM.length, 6) - 1 ? "1px solid rgba(255,255,255,.06)" : "none"
+      borderBottom: i < Math.min(absM.length, 6) - 1 ? `1px solid ${C.bord}` : "none"
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -352,7 +352,7 @@ function ModuleDashboard({
     style: {
       fontSize: 13,
       fontWeight: 600,
-      color: C.cream
+      color: C.texte
     }
   }, a.e.prenom, " ", a.e.nom), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -367,7 +367,7 @@ function ModuleDashboard({
       fontSize: 11,
       fontWeight: 700,
       color: a.s === "absent_nj" ? C.red : C.orange,
-      background: a.s === "absent_nj" ? "rgba(224,85,85,.15)" : "rgba(224,144,48,.15)",
+      background: a.s === "absent_nj" ? C.redPale : C.orangePale,
       padding: "3px 8px",
       borderRadius: 20
     }

@@ -29,8 +29,8 @@ function MiniArea({ label, value, onChange, placeholder, rows }) {
       placeholder: placeholder || "",
       rows: rows || 2,
       style: {
-        width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(212,175,55,.2)",
-        borderRadius: 8, padding: "9px 11px", color: C.cream, fontSize: 14, fontFamily: "inherit",
+        width: "100%", background: C.surface, border: `1px solid ${C.bord}`,
+        borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 14, fontFamily: "inherit",
         outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5
       }
     })
@@ -43,7 +43,7 @@ function Suggestions({ items, onPick }) {
     items.map(t => h("button", {
       key: t,
       onClick: () => onPick(t),
-      style: { background: "rgba(212,175,55,.1)", border: "1px solid rgba(212,175,55,.25)", borderRadius: 20, padding: "5px 11px", color: C.gold, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }
+      style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 20, padding: "5px 11px", color: C.navyL, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }
     }, "+ " + t))
   );
 }
@@ -57,15 +57,15 @@ function CarteSuiviEleve({ eleve, valeur, onChange, ouvert, onToggleOuvert, sugg
 
   return h("div", {
     style: {
-      background: rempli ? "rgba(212,175,55,.07)" : "rgba(255,255,255,.04)",
-      border: `1px solid ${rempli ? "rgba(212,175,55,.3)" : "rgba(255,255,255,.09)"}`,
+      background: rempli ? C.navyPale : C.surface,
+      border: `1px solid ${rempli ? C.goldBord : C.bord}`,
       borderRadius: 14, padding: 13, marginBottom: 10
     }
   },
     h("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 } },
       h(Avatar, { p: eleve.prenom, n: eleve.nom, s: 38 }),
       h("div", { style: { flex: 1, minWidth: 0 } },
-        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.cream, fontFamily: FD } }, `${eleve.prenom} ${eleve.nom}`),
+        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.texte, fontFamily: FD } }, `${eleve.prenom} ${eleve.nom}`),
         h("div", { style: { fontSize: 11, color: C.gray } }, eleve.niveau)),
       cfg && h("span", { style: { fontSize: 18 } }, cfg.e)
     ),
@@ -77,8 +77,8 @@ function CarteSuiviEleve({ eleve, valeur, onChange, ouvert, onToggleOuvert, sugg
           key: n.k,
           onClick: () => set("niveau_seance", on ? null : n.k),
           style: {
-            background: on ? `${n.c}22` : "rgba(255,255,255,.05)",
-            border: on ? `2px solid ${n.c}` : "1px solid rgba(255,255,255,.1)",
+            background: on ? `${n.c}22` : C.surface,
+            border: on ? `2px solid ${n.c}` : `1px solid ${C.bord}`,
             borderRadius: 10, padding: "7px 2px", cursor: "pointer", fontFamily: "inherit",
             display: "flex", flexDirection: "column", alignItems: "center", gap: 2
           }
@@ -100,7 +100,7 @@ function CarteSuiviEleve({ eleve, valeur, onChange, ouvert, onToggleOuvert, sugg
       style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", padding: "2px 0" }
     }, ouvert ? "− Moins de détails" : "+ Notions, progrès, devoirs"),
 
-    ouvert && h("div", { className: "fx-fade-slide-up", style: { marginTop: 10, borderTop: "1px solid rgba(212,175,55,.12)", paddingTop: 10 } },
+    ouvert && h("div", { className: "fx-fade-slide-up", style: { marginTop: 10, borderTop: `1px solid ${C.bord}`, paddingTop: 10 } },
       h(Suggestions, { items: suggestions, onPick: ajouterNotion }),
       h(MiniArea, { label: "Travaillé avec cet élève", value: v.notions, onChange: t => set("notions", t), placeholder: "Thalès, équations…" }),
       h(MiniArea, { label: "Progrès / points forts", value: v.progres, onChange: t => set("progres", t), placeholder: "Ce qui a bien marché…" }),
@@ -149,11 +149,11 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
 
   if (etape === "groupes") {
     return h("div", null,
-      h("div", { style: { background: "rgba(212,175,55,.08)", border: "1px solid rgba(212,175,55,.2)", borderRadius: 14, padding: 14, marginBottom: 16 } },
+      h("div", { style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 14, padding: 14, marginBottom: 16 } },
         h(Lbl, { text: "Date de la séance" }),
         h("input", {
           type: "date", value: date, onChange: e => setDate(e.target.value),
-          style: { width: "100%", background: "transparent", border: "1px solid rgba(212,175,55,.3)", borderRadius: 8, padding: "10px 12px", color: C.cream, fontSize: 16, fontFamily: "inherit", outline: "none", boxSizing: "border-box", colorScheme: "dark" }
+          style: { width: "100%", background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "10px 12px", color: C.texte, fontSize: 16, fontFamily: "inherit", outline: "none", boxSizing: "border-box", colorScheme: "light" }
         }),
         h("div", { style: { fontSize: 13, color: C.gray, marginTop: 6 } },
           "📅 " + new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))
@@ -167,19 +167,19 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
             key: g.id,
             onClick: () => ouvrirGroupe(g),
             style: {
-              background: nbCR ? "rgba(212,175,55,.08)" : "rgba(255,255,255,.04)",
-              border: nbCR ? "1.5px solid rgba(212,175,55,.4)" : "1px solid rgba(255,255,255,.1)",
+              background: nbCR ? C.navyPale : C.surface,
+              border: nbCR ? `1.5px solid ${C.bord}` : `1px solid ${C.bord}`,
               borderRadius: 14, padding: 16, cursor: "pointer", fontFamily: "inherit", textAlign: "left"
             }
           },
             h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 } },
               h("div", null,
-                h("div", { style: { fontSize: 17, fontWeight: 800, color: C.cream, fontFamily: FD, marginBottom: 4 } },
+                h("div", { style: { fontSize: 17, fontWeight: 800, color: C.texte, fontFamily: FD, marginBottom: 4 } },
                   g.nom, h("span", { style: { fontSize: 11, fontWeight: 700, color: C.gold, marginLeft: 8 } }, g.matiere)),
                 h("div", { style: { fontSize: 12, color: C.gray } },
                   horaireLabel(g), " • ", (g.eids || []).length, " élèves", appelFait ? "" : " • appel non fait")),
               nbCR
-                ? h("span", { style: { fontSize: 11, fontWeight: 700, color: C.gold, background: "rgba(212,175,55,.15)", padding: "4px 10px", borderRadius: 20, whiteSpace: "nowrap" } }, `✓ ${nbCR} rédigé${nbCR > 1 ? "s" : ""}`)
+                ? h("span", { style: { fontSize: 11, fontWeight: 700, color: C.navyL, background: C.navyPale, padding: "4px 10px", borderRadius: 20, whiteSpace: "nowrap" } }, `✓ ${nbCR} rédigé${nbCR > 1 ? "s" : ""}`)
                 : h("span", { style: { color: C.gray, fontSize: 20 } }, "›")));
         }),
         groupes.length === 0 && h("div", { style: { textAlign: "center", padding: "30px 0", color: C.gray, fontSize: 13 } }, "Aucun groupe pour l'instant.")
@@ -189,8 +189,8 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
 
   if (etape === "confirme") {
     return h("div", { className: "fx-fade-slide-up", style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", textAlign: "center", padding: "0 20px" } },
-      h("div", { className: "fx-pop-in", style: { width: 80, height: 80, borderRadius: "50%", background: "rgba(212,175,55,.15)", border: `3px solid ${C.gold}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 20 } }, "📝"),
-      h("div", { style: { fontSize: 24, fontWeight: 800, color: C.cream, fontFamily: FD, marginBottom: 6 } }, "Compte-rendu enregistré !"),
+      h("div", { className: "fx-pop-in", style: { width: 80, height: 80, borderRadius: "50%", background: C.navyPale, border: `3px solid ${C.gold}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 20 } }, "📝"),
+      h("div", { style: { fontSize: 24, fontWeight: 800, color: C.texte, fontFamily: FD, marginBottom: 6 } }, "Compte-rendu enregistré !"),
       h("div", { style: { fontSize: 14, color: C.gray, marginBottom: 20 } }, `${grp.nom} • ${fmtDateLongue(date)}`),
       h("div", { style: { fontSize: 13, color: C.gray, marginBottom: 24, maxWidth: 300, lineHeight: 1.6 } },
         "Il alimentera automatiquement le bilan hebdomadaire envoyé aux parents."),
@@ -238,7 +238,7 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
 
   return h("div", null,
     h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
-      h("div", { style: { fontSize: 15, fontWeight: 800, color: C.cream, fontFamily: FD } }, grp.nom),
+      h("div", { style: { fontSize: 15, fontWeight: 800, color: C.texte, fontFamily: FD } }, grp.nom),
       h("span", { style: { fontSize: 11, fontWeight: 700, color: C.gold } }, grp.matiere),
       h("button", {
         onClick: () => { setEtape("groupes"); setGrp(null); },
@@ -246,19 +246,19 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
       }, "← Groupes")
     ),
 
-    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,.04)", border: "1px solid rgba(212,175,55,.15)", borderRadius: 10, padding: "10px 14px", marginBottom: 14 } },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 } },
       h("span", { style: { fontSize: 13, color: C.gray } }, "📅"),
       h("input", {
         type: "date", value: date, onChange: e => changerDate(e.target.value),
-        style: { flex: 1, background: "transparent", border: "none", color: C.cream, fontSize: 14, fontFamily: "inherit", outline: "none", colorScheme: "dark" }
+        style: { flex: 1, background: "transparent", border: "none", color: C.texte, fontSize: 14, fontFamily: "inherit", outline: "none", colorScheme: "light" }
       }),
       h("span", { style: { fontSize: 11, fontWeight: 700, color: nbRemplis ? C.gold : C.gray } }, `${nbRemplis}/${listeIds.length}`)
     ),
 
-    !appelFait && h("div", { style: { background: "rgba(224,144,48,.1)", border: "1px solid rgba(224,144,48,.3)", borderRadius: 10, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: C.orange, lineHeight: 1.5 } },
+    !appelFait && h("div", { style: { background: C.orangePale, border: `1px solid ${C.orangeBord}`, borderRadius: 10, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: C.orange, lineHeight: 1.5 } },
       "L'appel n'a pas encore été fait pour cette séance — tout le groupe est affiché. Faites l'appel d'abord pour ne voir que les présents."),
 
-    h("div", { style: { background: "rgba(212,175,55,.07)", border: "1px solid rgba(212,175,55,.22)", borderRadius: 14, padding: 13, marginBottom: 14 } },
+    h("div", { style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 14, padding: 13, marginBottom: 14 } },
       h(Lbl, { text: "Travaillé en séance (tout le groupe)" }),
       h(Suggestions, { items: suggestions, onPick: t => setCommun(commun.trim() ? `${commun.trim()}, ${t}` : t) }),
       h("textarea", {
@@ -266,7 +266,7 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
         onChange: e => setCommun(e.target.value),
         placeholder: "Théorème de Thalès, exercices d'application…",
         rows: 2,
-        style: { width: "100%", background: "rgba(0,0,0,.25)", border: "1px solid rgba(212,175,55,.2)", borderRadius: 8, padding: "9px 11px", color: C.cream, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", resize: "vertical", marginBottom: 8, lineHeight: 1.5 }
+        style: { width: "100%", background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", resize: "vertical", marginBottom: 8, lineHeight: 1.5 }
       }),
       h(BtnPrimary, { label: `↓ Appliquer aux ${listeIds.length} élèves`, onClick: appliquerATous, disabled: !commun.trim(), full: true })
     ),
@@ -284,7 +284,7 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
           }) : null;
         }),
 
-    listeIds.length > 0 && h("div", { style: { position: "sticky", bottom: 78, paddingTop: 8, background: `linear-gradient(to top, ${C.navy} 60%, transparent)` } },
+    listeIds.length > 0 && h("div", { style: { position: "sticky", bottom: 78, paddingTop: 8, background: `linear-gradient(to top, ${C.fond} 62%, transparent)` } },
       h(BtnPrimary, { label: saving ? "Enregistrement…" : "💾 Enregistrer le compte-rendu", onClick: enregistrer, disabled: saving, full: true }))
   );
 }

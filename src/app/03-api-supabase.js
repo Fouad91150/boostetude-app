@@ -10,9 +10,15 @@ const api = {
     const borne = depuisUnAn();
     const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), sb.from("cours").select("*").gte("date", borne), sb.from("presences").select("*").gte("date", borne), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
     for (const r of [el, gr, co, pr, eg]) if (r.error) throw r.error;
-    const elList = (el.data || []).map(normalizeEleveDB);
+    let elList = (el.data || []).map(normalizeEleveDB);
     const egList = eg.data || [];
     const grList = (gr.data || []).map(g => normalizeGroupeDB(g, elList, egList));
+    // La remise d'engagement multiple s'applique avant tout calcul de montant,
+    // pour que la facture, le PDF et les messages disent tous la même chose.
+    if (isAdmin) {
+      const { data: reg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
+      elList = appliquerRemiseMulti(elList, grList, reg && reg.remise_multi);
+    }
     const coursMap = {};
     (co.data || []).forEach(c => {
       coursMap[c.id] = c;
@@ -42,7 +48,8 @@ const api = {
         id: p.id,
         eleveId: p.eleve_id,
         nbSeances: p.nb_seances ?? 0,
-        montant: p.montant,
+        montant: Number(p.montant) || 0,
+        encaisse: Number(p.montant_encaisse) || 0,
         statut: p.statut ?? "en_attente",
         mode: p.mode ?? "Virement",
         datePaiement: p.date_paiement ?? "",
@@ -50,7 +57,12 @@ const api = {
         periodeDebut: p.periode_debut ?? null,
         periodeFin: p.periode_fin ?? null,
         numero: p.numero ?? null,
+        derniereRelance: p.derniere_relance ?? null,
         dateEmission: p.date_emission ?? null,
+        // Un stage se facture au forfait : `prestation` porte le libellé à imprimer
+        // et `stageId` dit que cette facture ne suit pas l'appel.
+        prestation: p.prestation ?? null,
+        stageId: p.stage_id ?? null,
         datesSeances: (p.dates_seances ?? []).map(d => typeof d === "string" ? {
           date: d,
           matiere: ""
@@ -162,7 +174,7 @@ const api = {
     const {
       data,
       error
-    } = await sb.from("profs").select("id,prenom,nom,email,role").order("nom");
+    } = await sb.from("profs").select("id,prenom,nom,email,role,taux_horaire,telephone").order("nom");
     if (error) throw error;
     return data || [];
   },
@@ -241,10 +253,12 @@ const api = {
   // (un même élève peut cumuler plusieurs matières, ex. Maths + Physique, sur une même facture).
   // Ne touche jamais une facture déjà payée — elle reste figée dans l'historique.
   async syncFacture(eleveId, dates, montant) {
+    // Seul un brouillon suit l'appel. Une facture qui porte un numéro est figée :
+    // son montant a été communiqué au parent, il ne peut plus changer.
     const {
       data: existing,
       error: e1
-    } = await sb.from("paiements").select("id,statut").eq("eleve_id", eleveId).neq("statut", "paye").maybeSingle();
+    } = await sb.from("paiements").select("id,statut").eq("eleve_id", eleveId).is("numero", null).is("stage_id", null).neq("statut", "paye").maybeSingle();
     if (e1) throw e1;
     if (existing) {
       if (dates.length === 0) {
@@ -384,6 +398,166 @@ Object.assign(api, {
   },
   async logBilan(row) {
     const { error } = await sb.from("bilans_envoyes").insert(row);
+    if (error) throw error;
+  }
+});
+
+// ─── ENCAISSEMENTS ───────────────────────────────────────────────────────────
+// Ce que le parent a effectivement versé, versement par versement. La base
+// recalcule seule le solde de la facture et son statut (déclencheur).
+Object.assign(api, {
+  async fetchEncaissements() {
+    const { data, error } = await sb.from("encaissements").select("*").order("date", { ascending: false });
+    if (error) throw error;
+    return (data || []).map(e => ({
+      id: e.id,
+      factureId: e.facture_id,
+      date: e.date,
+      montant: Number(e.montant) || 0,
+      mode: e.mode || "Espèces",
+      note: e.note || ""
+    }));
+  },
+  async ajouterEncaissement(factureId, { montant, mode, date, note }) {
+    const valeur = Math.round((Number(montant) || 0) * 100) / 100;
+    if (!(valeur > 0)) throw new Error("Le montant du versement doit être supérieur à zéro.");
+    const { error } = await sb.from("encaissements").insert({
+      facture_id: factureId,
+      montant: valeur,
+      mode: mode || "Espèces",
+      date: date || todayStr(),
+      note: note || null
+    });
+    if (error) throw error;
+  },
+  // Annuler, c'est conserver le numéro et sortir le montant du chiffre d'affaires.
+  // Supprimer n'est possible que pour un brouillon, qui n'a jamais rien promis.
+  async annulerFacture(factureId, motif) {
+    const { error } = await sb.rpc("annuler_facture", { p_facture_id: factureId, p_motif: motif || null });
+    if (error) throw error;
+  },
+  // Noter la relance évite les deux écueils symétriques : oublier un parent
+  // pendant trois semaines, ou le relancer deux fois le même jour.
+  async marquerRelance(factureId) {
+    const { error } = await sb.from("paiements").update({ derniere_relance: todayStr() }).eq("id", factureId);
+    if (error) throw error;
+  },
+  async retablirFacture(factureId) {
+    const { error } = await sb.rpc("retablir_facture", { p_facture_id: factureId });
+    if (error) throw error;
+  },
+  async supprimerEncaissement(id) {
+    const { error } = await sb.from("encaissements").delete().eq("id", id);
+    if (error) throw error;
+  }
+});
+
+// ─── STAGES DE VACANCES ──────────────────────────────────────────────────────
+// Un stage se vend au forfait, pas à la séance. Sa facture reste une facture
+// ordinaire — même numérotation, mêmes versements, mêmes relances — simplement
+// rattachée au stage pour que le document dise ce qu'il facture.
+Object.assign(api, {
+  async fetchStages() {
+    const [st, ins] = await Promise.all([
+      sb.from("stages").select("*").order("date_debut", { ascending: false }),
+      sb.from("stages_inscrits").select("*")
+    ]);
+    if (st.error) throw st.error;
+    if (ins.error) throw ins.error;
+    const inscrits = (ins.data || []).map(i => ({
+      id: i.id, stageId: i.stage_id, eleveId: i.eleve_id,
+      tarif: Number(i.tarif) || 0, factureId: i.facture_id || null
+    }));
+    return {
+      stages: (st.data || []).map(s => ({
+        id: s.id, nom: s.nom, niveau: s.niveau || "", matiere: s.matiere || "Mathématiques",
+        dateDebut: s.date_debut, dateFin: s.date_fin, horaire: s.horaire || "",
+        tarif: Number(s.tarif) || 0, places: s.places || 8, notes: s.notes || ""
+      })),
+      inscrits
+    };
+  },
+
+  async saveStage(form) {
+    const ligne = {
+      nom: form.nom, niveau: form.niveau || null, matiere: form.matiere || "Mathématiques",
+      date_debut: form.dateDebut, date_fin: form.dateFin, horaire: form.horaire || null,
+      tarif: Number(form.tarif) || 0, places: Number(form.places) || 8, notes: form.notes || null
+    };
+    const { error } = form.id
+      ? await sb.from("stages").update(ligne).eq("id", form.id)
+      : await sb.from("stages").insert(ligne);
+    if (error) throw error;
+  },
+
+  async supprimerStage(id) {
+    const { error } = await sb.from("stages").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  async inscrireAuStage(stageId, eleveId, tarif) {
+    const { error } = await sb.from("stages_inscrits").insert({
+      stage_id: stageId, eleve_id: eleveId, tarif: Number(tarif) || 0
+    });
+    if (error) throw error;
+  },
+
+  async desinscrireDuStage(inscriptionId) {
+    const { error } = await sb.from("stages_inscrits").delete().eq("id", inscriptionId);
+    if (error) throw error;
+  },
+
+  // Une facture par inscrit : le forfait du stage, rattaché au stage. L'appelant
+  // choisit qui facturer — l'écran des stages ne propose que les inscrits sans
+  // facture valide — si bien que l'opération peut être relancée sans risque après
+  // l'ajout d'un inscrit de dernière minute ou l'annulation d'une facture.
+  async facturerStage(stage, inscriptions) {
+    const aFacturer = (inscriptions || []).filter(i => i.stageId === stage.id);
+    // Le libellé imprimé sur la facture. « Stage » n'est pas ajouté deux fois.
+    const libelle = /^stages?\b/i.test(stage.nom || "") ? stage.nom : `Stage — ${stage.nom}`;
+    for (const i of aFacturer) {
+      const { data, error } = await sb.from("paiements").insert({
+        eleve_id: i.eleveId,
+        montant: i.tarif,
+        nb_seances: 0,
+        statut: "en_attente",
+        stage_id: stage.id,
+        prestation: stage.matiere ? `${libelle} · ${stage.matiere}` : libelle,
+        periode_debut: stage.dateDebut,
+        periode_fin: stage.dateFin,
+        dates_seances: [],
+        mois: String(stage.dateDebut || "").slice(0, 7),
+        notes: `Stage : ${stage.nom}`
+      }).select("id").single();
+      if (error) throw error;
+      const { error: e2 } = await sb.from("stages_inscrits").update({ facture_id: data.id }).eq("id", i.id);
+      if (e2) throw e2;
+    }
+    return aFacturer.length;
+  }
+});
+
+// ─── MON COMPTE ──────────────────────────────────────────────────────────────
+// Un mot de passe transmis par message doit pouvoir être remplacé tout de suite.
+// Supabase le change sur la session en cours : aucun email de confirmation à
+// attendre — et c'est heureux, les adresses @boostetude.fr des professeurs n'ont
+// pas de boîte aux lettres.
+Object.assign(api, {
+  async changerMotDePasse(nouveau) {
+    const { error } = await sb.auth.updateUser({ password: nouveau });
+    if (error) throw error;
+  }
+});
+
+// Le taux horaire d'un professeur : ce que coûte une heure de cours assurée.
+Object.assign(api, {
+  async saveTauxProf(profId, taux) {
+    const { error } = await sb.from("profs").update({ taux_horaire: Number(taux) || 0 }).eq("id", profId);
+    if (error) throw error;
+  },
+  // Le numéro sert à lui envoyer son récapitulatif ; vide, il s'efface.
+  async saveTelProf(profId, tel) {
+    const { error } = await sb.from("profs").update({ telephone: (tel || "").trim() || null }).eq("id", profId);
     if (error) throw error;
   }
 });

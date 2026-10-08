@@ -2,11 +2,27 @@
 // La dernière facture payée d'un élève marque la fin de la période déjà réglée.
 // Tout ce qui suit (séances présentes après cette date) s'accumule sur une facture
 // ouverte unique, jusqu'à ce qu'elle soit à son tour marquée payée.
+// Une facture est « figée » dès qu'elle porte un numéro — elle est partie chez le
+// parent — ou qu'elle est soldée. Les séances qu'elle couvre sont définitivement
+// facturées ; les suivantes alimentent un nouveau brouillon, même si le parent n'a
+// encore rien versé. Sans cela, une facture émise continuerait de grossir après
+// avoir été envoyée, et son montant ne vaudrait plus rien.
 const dernierePeriodeFin = (eid, factures) => {
-  const payees = factures.filter(f => f.eleveId === eid && f.statut === "paye" && f.periodeFin);
-  if (!payees.length) return null;
-  return payees.reduce((max, f) => f.periodeFin > max ? f.periodeFin : max, payees[0].periodeFin);
+  // Un stage de vacances se facture à part, au forfait : sa période ne doit pas
+  // faire croire que les cours de la même semaine ont déjà été réglés.
+  const figees = (factures || []).filter(f =>
+    f.eleveId === eid && !f.stageId && f.statut !== "annulee" && (f.statut === "paye" || f.numero));
+  let fin = null;
+  figees.forEach(f => {
+    const dates = f.datesSeances || [];
+    const derniere = dates.reduce((max, d) => (!max || d.date > max ? d.date : max), f.periodeFin || null);
+    if (derniere && (!fin || derniere > fin)) fin = derniere;
+  });
+  return fin;
 };
+
+// Ce qu'il reste à régler sur une facture, une fois les versements déduits.
+const resteDu = f => Math.max(0, Math.round(((f?.montant || 0) - (f?.encaisse || 0)) * 100) / 100);
 // Chaque séance renvoyée porte sa matière (un même élève peut suivre plusieurs
 // matières, ex. Maths + Physique) afin que la facture détaille quoi a été suivi.
 const seancesOuvertes = (eid, appels, groupes, depuis) => {

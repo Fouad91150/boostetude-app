@@ -191,6 +191,9 @@ function construireFacturePDF(facture, eleve, parametres) {
   const dates = facture.datesSeances || [];
   const emise = !!facture.numero;
   const matieres = groupParMatiere(dates);
+  // Un stage de vacances ne se compte pas en séances : il se vend au forfait.
+  // `prestation` porte alors le libellé à imprimer, et le montant fait la ligne.
+  const forfait = (facture.prestation || "").trim();
   const mentionEI = (p.forme_juridique || "EI").toUpperCase() === "EI" ? "Entrepreneur individuel" : p.forme_juridique;
 
   let y = M + 10;
@@ -218,9 +221,15 @@ function construireFacturePDF(facture, eleve, parametres) {
     page.texte(DROITE, yd, `Émise le ${fmtDateLongue(facture.dateEmission)}`, { taille: 8.5, couleur: GRIS, align: "droite" });
     yd += 11;
   }
-  const periode = dates.length
-    ? (dates.length === 1 ? fmtDateLongue(dates[0].date) : `${fmtDateCourt(dates[0].date)} – ${fmtDateCourt(dates[dates.length - 1].date)}`)
-    : "Facture en cours";
+  const periodeForfait = facture.periodeDebut
+    ? (facture.periodeFin && facture.periodeFin !== facture.periodeDebut
+        ? `Du ${fmtDateCourt(facture.periodeDebut)} au ${fmtDateLongue(facture.periodeFin)}`
+        : fmtDateLongue(facture.periodeDebut))
+    : "";
+  const periode = forfait ? (periodeForfait || "Forfait")
+    : dates.length
+      ? (dates.length === 1 ? fmtDateLongue(dates[0].date) : `${fmtDateCourt(dates[0].date)} – ${fmtDateCourt(dates[dates.length - 1].date)}`)
+      : "Facture en cours";
   page.texte(DROITE, yd, periode, { taille: 8.5, couleur: GRIS, align: "droite" });
 
   y = Math.max(yg, yd) + 16;
@@ -243,7 +252,18 @@ function construireFacturePDF(facture, eleve, parametres) {
   page.texte(DROITE - 10, y + 4, "Total", { taille: 9, gras: true, couleur: [1, 1, 1], align: "droite" });
   y += 26;
 
-  if (matieres.length === 0) {
+  if (forfait) {
+    const total = Number(facture.montant) || 0;
+    page.texte(M + 10, y + 4, forfait, { taille: 10, gras: true, couleur: NOIR });
+    const finLigne = page.paragraphe(M + 10, y + 16,
+      `Forfait tout compris${periodeForfait ? ` · ${periodeForfait.toLowerCase()}` : ""}` +
+      (eleve.niveau ? ` · niveau ${eleve.niveau}` : ""),
+      COL_QTE - M - 30, { taille: 8, couleur: GRIS, interligne: 1.3 });
+    page.texte(COL_QTE, y + 4, "1", { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(COL_TARIF, y + 4, euros(total), { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(DROITE - 10, y + 4, euros(total), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
+    y = Math.max(finLigne, y + 24) + 6;
+  } else if (matieres.length === 0) {
     page.texte(M + 10, y + 6, "Aucune séance", { taille: 9.5, couleur: GRIS });
     y += 24;
   } else {
@@ -251,7 +271,8 @@ function construireFacturePDF(facture, eleve, parametres) {
       const total = parseFloat((g.dates.length * 2 * eleve.th).toFixed(2));
       page.texte(M + 10, y + 4, `${g.matiere || "Cours"} — ${eleve.niveau}`, { taille: 10, gras: true, couleur: NOIR });
       page.texte(M + 10, y + 16,
-        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`,
+        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
+        (eleve.remise > 0 ? ` · remise de ${euros(eleve.remise)}/h (inscriptions multiples)` : ""),
         { taille: 8, couleur: GRIS });
       const finDates = page.paragraphe(M + 10, y + 27, g.dates.map(d => fmtDateCourt(d)).join(" · "),
         COL_QTE - M - 30, { taille: 8, couleur: GRIS_PALE, interligne: 1.3 });
@@ -266,11 +287,21 @@ function construireFacturePDF(facture, eleve, parametres) {
     });
   }
 
-  // ── Net à payer ────────────────────────────────────────────
+  // ── Total, acomptes, net à payer ───────────────────────────
+  const encaisse = Math.max(0, Number(facture.encaisse) || 0);
+  const reste = Math.max(0, Math.round(((Number(facture.montant) || 0) - encaisse) * 100) / 100);
   y += 8;
+  if (encaisse > 0) {
+    // Le détail du règlement partiel se lit avant le solde, comme sur un relevé.
+    page.texte(DROITE - 120, y + 4, "Total", { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(DROITE, y + 4, euros(facture.montant), { taille: 9.5, couleur: NOIR, align: "droite" });
+    page.texte(DROITE - 120, y + 18, "Déjà réglé", { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(DROITE, y + 18, "- " + euros(encaisse), { taille: 9.5, couleur: [0.18, 0.49, 0.31], align: "droite" });
+    y += 28;
+  }
   page.rect(M, y - 8, DROITE - M, 34, NAVY_PDF);
-  page.texte(M + 16, y + 13, "NET À PAYER", { taille: 11, gras: true, couleur: [1, 1, 1] });
-  page.texte(DROITE - 16, y + 15, euros(facture.montant), { taille: 19, gras: true, couleur: OR_PDF, align: "droite" });
+  page.texte(M + 16, y + 13, encaisse > 0 ? "RESTE À PAYER" : "NET À PAYER", { taille: 11, gras: true, couleur: [1, 1, 1] });
+  page.texte(DROITE - 16, y + 15, euros(encaisse > 0 ? reste : facture.montant), { taille: 19, gras: true, couleur: OR_PDF, align: "droite" });
   y += 38;
   page.texte(DROITE, y + 4, p.mention_tva || "TVA non applicable, article 293 B du CGI",
     { taille: 8.5, couleur: GRIS, align: "droite" });
@@ -279,7 +310,7 @@ function construireFacturePDF(facture, eleve, parametres) {
   // ── Règlement ──────────────────────────────────────────────
   page.ligne(M, y, DROITE, y, [0.9, 0.9, 0.9], 0.5);
   y += 14;
-  const payee = facture.statut === "paye";
+  const payee = facture.statut === "paye" || (encaisse > 0 && reste === 0);
   page.texte(M, y, "Règlement", { taille: 9.5, gras: true, couleur: NOIR });
   y += 13;
   if (payee) {

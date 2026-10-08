@@ -10,12 +10,16 @@ function App() {
   const [factures, setFactures] = useState([]);
   const [parametres, setParametres] = useState(null);
   const [comptesRendus, setComptesRendus] = useState([]);
+  const [encaissements, setEncaissements] = useState([]);
   const [bilans, setBilans] = useState([]);
+  const [stages, setStages] = useState([]);
+  const [inscrits, setInscrits] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [dataError, setDataError] = useState("");
   const [tab, setTab] = useState("dashboard");
   const [monRole, setMonRole] = useState(null);
   const [profs, setProfs] = useState([]);
+  const [compteOuvert, setCompteOuvert] = useState(false);
   const [monProfil, setMonProfil] = useState(null);
   useEffect(() => {
     sb.auth.getSession().then(({
@@ -44,7 +48,13 @@ function App() {
       setGroupes(gr);
       setAppels(ap);
       setFactures(fa);
-      if (role === "admin") setParametres(await api.fetchParametres());
+      if (role === "admin") {
+        setParametres(await api.fetchParametres());
+        setEncaissements(await api.fetchEncaissements().catch(() => []));
+        const st = await api.fetchStages().catch(() => ({ stages: [], inscrits: [] }));
+        setStages(st.stages);
+        setInscrits(st.inscrits);
+      }
       setComptesRendus(await api.fetchComptesRendus());
       setBilans(await api.fetchBilansEnvoyes());
     } catch (e) {
@@ -78,7 +88,11 @@ function App() {
       setComptesRendus(await api.fetchComptesRendus());
       setBilans(await api.fetchBilansEnvoyes());
       if (role === "admin") {
+        setEncaissements(await api.fetchEncaissements().catch(() => []));
         setParametres(await api.fetchParametres());
+        const st = await api.fetchStages().catch(() => ({ stages: [], inscrits: [] }));
+        setStages(st.stages);
+        setInscrits(st.inscrits);
         try {
           setProfs(await api.fetchProfs());
         } catch (e) {/* non bloquant */}
@@ -106,6 +120,9 @@ function App() {
       setAuthError(e.message === "Invalid login credentials" ? "Email ou mot de passe incorrect." : e.message);
     }
     setAuthLoading(false);
+  };
+  const handleChangerMotDePasse = async nouveau => {
+    await api.changerMotDePasse(nouveau);
   };
   const doLogout = async () => {
     await sb.auth.signOut();
@@ -167,15 +184,71 @@ function App() {
       setBilans(await api.fetchBilansEnvoyes());
     } catch (e) {}
   };
+  const handleSaveTaux = async (profId, taux) => {
+    await api.saveTauxProf(profId, taux);
+    setProfs(await api.fetchProfs());
+  };
+  const handleSaveTel = async (profId, tel) => {
+    await api.saveTelProf(profId, tel);
+    setProfs(await api.fetchProfs());
+  };
   const handleSaveParametres = async form => {
     await api.saveParametres(form);
     setParametres(await api.fetchParametres());
   };
   // L'émission attribue le numéro définitif côté base ; on recharge pour
   // que la facture affichée porte tout de suite son numéro.
-  const handleEmettreFacture = async factureId => {
-    await api.emettreFacture(factureId);
+  const handleRelancer = async factureId => {
+    await api.marquerRelance(factureId);
     await reloadAll();
+  };
+  const handleAnnulerFacture = async (factureId, motif) => {
+    await api.annulerFacture(factureId, motif);
+    await reloadAll();
+  };
+  const handleRetablirFacture = async factureId => {
+    await api.retablirFacture(factureId);
+    await reloadAll();
+  };
+  const handleAjouterVersement = async (factureId, versement) => {
+    await api.ajouterEncaissement(factureId, versement);
+    await reloadAll();
+  };
+  const handleSupprimerVersement = async id => {
+    await api.supprimerEncaissement(id);
+    await reloadAll();
+  };
+  const rechargerStages = async () => {
+    const st = await api.fetchStages().catch(() => ({ stages: [], inscrits: [] }));
+    setStages(st.stages);
+    setInscrits(st.inscrits);
+  };
+  const handleSaveStage = async form => {
+    await api.saveStage(form);
+    await rechargerStages();
+  };
+  const handleInscrireStage = async (stageId, eleveId, tarif) => {
+    await api.inscrireAuStage(stageId, eleveId, tarif);
+    await rechargerStages();
+  };
+  const handleDesinscrireStage = async inscriptionId => {
+    await api.desinscrireDuStage(inscriptionId);
+    await rechargerStages();
+  };
+  // La facturation d'un stage crée de vraies factures : on recharge tout, pour
+  // qu'elles apparaissent aussi dans l'onglet Factures sans rafraîchir la page.
+  const handleFacturerStage = async (stage, inscriptions) => {
+    const n = await api.facturerStage(stage, inscriptions);
+    await rechargerStages();
+    await reloadAll();
+    return n;
+  };
+  const handleEmettreFacture = async (factureId, options) => {
+    const numero = await api.emettreFacture(factureId);
+    // Recharger prend une seconde ou deux : quand un partage suit immédiatement,
+    // l'appelant diffère ce rechargement pour ne pas perdre l'autorisation de partage.
+    if (!options || options.recharger !== false) await reloadAll();
+    return numero;
   };
   // Sauvegarde : le plan gratuit de Supabase ne sauvegarde rien de lui-même.
   const handleExportComplet = async () => ({
@@ -209,7 +282,7 @@ function App() {
   if (dataError) return /*#__PURE__*/React.createElement("div", {
     style: {
       minHeight: "100vh",
-      background: C.navy,
+      background: C.fond,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -246,6 +319,12 @@ function App() {
   const isAdmin = monRole === "admin";
   const nbAbsNJ = Object.entries(appels).filter(([k]) => k.split(":")[2]?.startsWith(nowYM())).reduce((s, [, p]) => s + Object.values(p).filter(v => v === "absent_nj").length, 0);
   const nbImpayes = factures.filter(f => f.statut === "en_attente" || f.statut === "impaye").length;
+  // Un inscrit sans facture valide, c'est une recette qui dort : le badge le dit.
+  const nbStagesAFacturer = inscrits.filter(i => {
+    if (!i.factureId) return true;
+    const f = factures.find(x => x.id === i.factureId);
+    return !f || f.statut === "annulee";
+  }).length;
   const conformiteIncomplete = isAdmin && champsManquants(parametres).length > 0;
   const lundiCourant = lundiDe(todayStr());
   const dimancheCourant = addJours(lundiCourant, 6);
@@ -287,6 +366,11 @@ function App() {
     l: "Factures",
     badge: nbImpayes > 0 ? nbImpayes : null
   }, {
+    k: "stages",
+    i: "🏖️",
+    l: "Stages",
+    badge: nbStagesAFacturer > 0 ? nbStagesAFacturer : null
+  }, {
     k: "reglages",
     i: "⚙️",
     l: "Réglages",
@@ -306,78 +390,127 @@ function App() {
     badge: nbBilansDus > 0 ? nbBilansDus : null
   }];
   const TITRES = isAdmin ? {
-    dashboard: "Dashboard",
+    dashboard: "Vue d'ensemble",
     eleves: "Élèves",
     appel: "Feuille d'appel",
     suivi: "Suivi de séance",
     bilans: "Bilans hebdo",
     factures: "Facturation",
+    stages: "Stages de vacances",
     reglages: "Réglages"
   } : {
     appel: "Feuille d'appel",
     suivi: "Suivi de séance",
     bilans: "Bilans hebdo"
   };
+  // L'en-tête porte la marque et le nom de l'écran ; le titre est répété en
+  // grand juste en dessous, sur le fond clair, là où l'œil le cherche.
   return /*#__PURE__*/React.createElement("div", {
     style: {
       minHeight: "100vh",
-      background: C.navy,
-      fontFamily: FD,
-      color: C.cream
+      background: C.fond,
+      color: C.texte
     }
   }, /*#__PURE__*/React.createElement(PileBandeaux, null), /*#__PURE__*/React.createElement("div", {
     style: {
-      background: `linear-gradient(135deg,${C.navyM},${C.navyL})`,
-      borderBottom: "1px solid rgba(212,175,55,.2)",
-      padding: "14px 20px",
+      background: C.navy,
+      padding: "10px 16px",
       position: "sticky",
       top: 0,
-      zIndex: 100
+      zIndex: 100,
+      boxShadow: "0 1px 3px rgba(10,20,40,.2)"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
-      alignItems: "flex-start"
+      alignItems: "center",
+      gap: 10,
+      maxWidth: 640,
+      margin: "0 auto"
     }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 10,
-      fontWeight: 700,
-      color: C.gold,
-      letterSpacing: "2px",
-      textTransform: "uppercase"
+      display: "flex",
+      alignItems: "center",
+      gap: 9,
+      minWidth: 0
     }
-  }, "Boost'Étude", !isAdmin && monProfil ? ` — ${[monProfil.prenom, monProfil.nom].filter(Boolean).join(" ")}` : ""), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 20,
-      fontWeight: 800,
-      color: C.cream,
+      width: 32,
+      height: 32,
+      borderRadius: 9,
+      background: "rgba(255,255,255,.14)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 16,
+      flexShrink: 0
+    }
+  }, "🎓"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14.5,
+      fontWeight: 600,
+      color: "#fff",
       fontFamily: FD,
+      lineHeight: 1.15,
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis"
+    }
+  }, "Boost'Étude"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "rgba(255,255,255,.72)",
       lineHeight: 1.2
     }
-  }, TITRES[tab])), /*#__PURE__*/React.createElement("button", {
-    onClick: doLogout,
+  }, isAdmin ? "Espace gestion" : monProfil ? [monProfil.prenom, monProfil.nom].filter(Boolean).join(" ") : "Espace professeur"))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setCompteOuvert(true),
+    title: "Mon compte",
     style: {
-      background: "rgba(255,255,255,.08)",
+      background: "rgba(255,255,255,.12)",
       border: "none",
-      borderRadius: 8,
-      padding: "6px 10px",
-      color: C.gray,
-      fontSize: 11,
-      fontWeight: 700,
+      borderRadius: 999,
+      padding: "6px 13px",
+      color: "#fff",
+      fontSize: 12.5,
+      fontWeight: 600,
       cursor: "pointer",
-      fontFamily: "inherit"
+      fontFamily: "inherit",
+      flexShrink: 0
     }
-  }, "Déconnexion"))), /*#__PURE__*/React.createElement("div", {
+  }, "Mon compte"))), compteOuvert && /*#__PURE__*/React.createElement(FenetreCompte, {
+    profil: monProfil,
+    email: (monProfil && monProfil.email) || (session && session.user && session.user.email) || "",
+    onFermer: () => setCompteOuvert(false),
+    onChanger: handleChangerMotDePasse,
+    onDeconnexion: () => {
+      setCompteOuvert(false);
+      doLogout();
+    }
+  }), /*#__PURE__*/React.createElement("div", {
     key: tab,
     className: "fx-fade-slide-up",
     style: {
-      padding: "16px 16px 90px",
-      maxWidth: 600,
+      padding: "14px 16px 94px",
+      maxWidth: 640,
       margin: "0 auto"
     }
-  }, tab === "dashboard" && isAdmin && /*#__PURE__*/React.createElement(ModuleDashboard, {
+  }, /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: 23,
+      fontWeight: 700,
+      color: C.texte,
+      fontFamily: FD,
+      lineHeight: 1.2,
+      margin: "2px 0 14px"
+    }
+  }, TITRES[tab]), tab === "dashboard" && isAdmin && /*#__PURE__*/React.createElement(ModuleDashboard, {
     eleves: eleves,
     groupes: groupes,
     appels: appels,
@@ -409,7 +542,14 @@ function App() {
     onDeleteFacture: handleDeleteFacture,
     onDeleteFactureEnCours: handleDeleteFactureEnCours,
     parametres: parametres,
-    onEmettreFacture: handleEmettreFacture
+    onEmettreFacture: handleEmettreFacture,
+    onRecharger: reloadAll,
+    encaissements: encaissements,
+    onAjouterVersement: handleAjouterVersement,
+    onSupprimerVersement: handleSupprimerVersement,
+    onAnnulerFacture: handleAnnulerFacture,
+    onRetablirFacture: handleRetablirFacture,
+    onRelancer: handleRelancer
   }), tab === "suivi" && /*#__PURE__*/React.createElement(ModuleSuivi, {
     eleves: eleves,
     groupes: groupes,
@@ -425,26 +565,42 @@ function App() {
     bilans: bilans,
     monProfilId: monProfil && monProfil.id ? monProfil.id : null,
     onLog: handleLogBilan
+  }), tab === "stages" && isAdmin && /*#__PURE__*/React.createElement(ModuleStages, {
+    stages: stages,
+    inscrits: inscrits,
+    eleves: eleves,
+    factures: factures,
+    onSaveStage: handleSaveStage,
+    onInscrire: handleInscrireStage,
+    onDesinscrire: handleDesinscrireStage,
+    onFacturerStage: handleFacturerStage
   }), tab === "reglages" && isAdmin && /*#__PURE__*/React.createElement(ModuleReglages, {
     parametres: parametres,
     eleves: eleves,
     groupes: groupes,
     appels: appels,
     factures: factures,
+    profs: profs,
     onSaveParametres: handleSaveParametres,
-    onExportComplet: handleExportComplet
+    onExportComplet: handleExportComplet,
+    onSaveTaux: handleSaveTaux,
+    onSaveTel: handleSaveTel
   })), TABS.length > 1 && /*#__PURE__*/React.createElement("div", {
+    // La barre du bas : blanche, posée sur un filet, avec des libellés lisibles.
+    // Huit onglets tiennent sur un écran de téléphone à condition de resserrer
+    // le texte — plutôt que d'en cacher un derrière un menu.
     style: {
       position: "fixed",
       bottom: 0,
       left: 0,
       right: 0,
       zIndex: 300,
-      background: `linear-gradient(to top,${C.navyM},rgba(10,20,40,.98))`,
-      borderTop: "1px solid rgba(212,175,55,.2)",
-      padding: "8px 0 14px",
+      background: C.surface,
+      borderTop: `1px solid ${C.bord}`,
+      padding: "7px 0 calc(10px + env(safe-area-inset-bottom))",
       display: "flex",
-      justifyContent: "space-around"
+      justifyContent: "space-around",
+      boxShadow: "0 -1px 3px rgba(18,28,46,.05)"
     }
   }, TABS.map(({
     k,
@@ -454,6 +610,7 @@ function App() {
   }) => /*#__PURE__*/React.createElement("button", {
     key: k,
     onClick: () => setTab(k),
+    "aria-current": tab === k ? "page" : undefined,
     style: {
       background: "none",
       border: "none",
@@ -462,53 +619,56 @@ function App() {
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
-      gap: 3,
-      padding: "0 3px",
+      gap: 2,
+      padding: "2px 2px 0",
       flex: 1,
       minWidth: 0,
       position: "relative"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 22,
-      filter: tab === k ? "none" : "grayscale(100%) opacity(0.5)",
-      transform: tab === k ? "scale(1.12)" : "scale(1)",
+      fontSize: TABS.length > 7 ? 19 : 21,
+      filter: tab === k ? "none" : "grayscale(100%) opacity(0.55)",
+      transform: tab === k ? "scale(1.08)" : "scale(1)",
       transition: "filter .2s,transform .2s"
     }
   }, i), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 9,
-      fontWeight: 700,
-      color: tab === k ? C.gold : C.gray,
-      letterSpacing: ".2px",
-      textTransform: "uppercase",
-      whiteSpace: "nowrap"
+      fontSize: TABS.length > 7 ? 9.5 : 10.5,
+      fontWeight: tab === k ? 700 : 500,
+      color: tab === k ? C.navy : C.gray,
+      letterSpacing: TABS.length > 7 ? "0" : ".01em",
+      whiteSpace: "nowrap",
+      maxWidth: "100%",
+      overflow: "hidden",
+      textOverflow: "ellipsis"
     }
   }, l), tab === k && /*#__PURE__*/React.createElement("div", {
     className: "fx-pop-in",
     style: {
       position: "absolute",
-      top: -8,
+      top: -7,
       left: "50%",
       transform: "translateX(-50%)",
-      width: 32,
+      width: 26,
       height: 3,
-      background: C.gold,
+      background: C.navy,
       borderRadius: "0 0 3px 3px"
     }
   }), badge && /*#__PURE__*/React.createElement("div", {
     className: "fx-pop-in",
     style: {
       position: "absolute",
-      top: -2,
-      right: 2,
+      top: 0,
+      right: 4,
       background: C.red,
       color: "#fff",
-      borderRadius: "50%",
-      width: 18,
-      height: 18,
+      borderRadius: 999,
+      minWidth: 17,
+      height: 17,
+      padding: "0 4px",
       fontSize: 10,
-      fontWeight: 800,
+      fontWeight: 700,
       display: "flex",
       alignItems: "center",
       justifyContent: "center"

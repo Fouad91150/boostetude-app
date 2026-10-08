@@ -36,7 +36,7 @@ function FicheEleve({
     style: {
       fontSize: 22,
       fontWeight: 800,
-      color: C.cream,
+      color: C.texte,
       fontFamily: FD
     }
   }, eleve.prenom, " ", eleve.nom), /*#__PURE__*/React.createElement("div", {
@@ -45,7 +45,7 @@ function FicheEleve({
       color: C.gray,
       marginTop: 2
     }
-  }, eleve.niveau, " • ", eleve.th, "€/h • ", groupeNom))), [{
+  }, eleve.niveau, " • ", euros(eleve.th), "/h • ", groupeNom))), [{
     t: "💰 Facturation",
     rows: [["Tarif horaire", `${eleve.th} €`], ["Séance de 2 h", `${eleve.th * 2} €`], ["Mode de règlement", eleve.mp]]
   }, {
@@ -57,8 +57,8 @@ function FicheEleve({
   } : null].filter(Boolean).map((card, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
-      background: "rgba(255,255,255,.04)",
-      border: "1px solid rgba(212,175,55,.12)",
+      background: C.surface,
+      border: `1px solid ${C.bord}`,
       borderRadius: 12,
       padding: 16,
       marginBottom: 10
@@ -84,7 +84,7 @@ function FicheEleve({
     }
   }, k), /*#__PURE__*/React.createElement("span", {
     style: {
-      color: C.cream,
+      color: C.texte,
       fontSize: 13,
       fontWeight: k ? 600 : 400
     }
@@ -100,8 +100,8 @@ function FicheEleve({
   }), /*#__PURE__*/React.createElement("button", {
     onClick: onToggle,
     style: {
-      background: eleve.actif ? "rgba(224,85,85,.12)" : "rgba(76,175,125,.12)",
-      border: `1px solid ${eleve.actif ? "rgba(224,85,85,.3)" : "rgba(76,175,125,.3)"}`,
+      background: eleve.actif ? C.redPale : C.greenPale,
+      border: `1px solid ${eleve.actif ? C.redBord : C.greenBord}`,
       borderRadius: 10,
       padding: "12px 16px",
       fontSize: 14,

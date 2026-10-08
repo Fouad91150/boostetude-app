@@ -58,7 +58,7 @@ function FormulaireGroupe({
     style: {
       fontSize: 20,
       fontWeight: 800,
-      color: C.cream,
+      color: C.texte,
       fontFamily: FD,
       marginBottom: 20
     }

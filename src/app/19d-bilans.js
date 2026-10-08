@@ -100,31 +100,31 @@ function CarteBilan({ eleve, donnees, envois, onEnvoi }) {
 
   return h("div", {
     style: {
-      background: dernier ? "rgba(76,175,125,.06)" : "rgba(255,255,255,.04)",
-      border: `1px solid ${dernier ? "rgba(76,175,125,.3)" : "rgba(212,175,55,.15)"}`,
+      background: dernier ? C.greenPale : C.surface,
+      border: `1px solid ${dernier ? C.greenBord : C.goldBord}`,
       borderRadius: 14, padding: 13, marginBottom: 10
     }
   },
     h("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 } },
       h(Avatar, { p: eleve.prenom, n: eleve.nom, s: 38 }),
       h("div", { style: { flex: 1, minWidth: 0 } },
-        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.cream, fontFamily: FD } }, `${eleve.prenom} ${eleve.nom}`),
+        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.texte, fontFamily: FD } }, `${eleve.prenom} ${eleve.nom}`),
         h("div", { style: { fontSize: 11, color: C.gray } },
           `${donnees.nbSeances} séance${donnees.nbSeances > 1 ? "s" : ""}`,
           donnees.absences.length ? ` • ${donnees.absences.length} absence${donnees.absences.length > 1 ? "s" : ""}` : "",
           eleve.tel ? "" : " • pas de téléphone")),
-      dernier && h("span", { style: { fontSize: 10, fontWeight: 700, color: C.green, background: "rgba(76,175,125,.15)", padding: "4px 9px", borderRadius: 20, whiteSpace: "nowrap" } },
+      dernier && h("span", { style: { fontSize: 10, fontWeight: 700, color: C.green, background: C.greenPale, padding: "4px 9px", borderRadius: 20, whiteSpace: "nowrap" } },
         "✓ " + (dernier.canal === "whatsapp" ? "WhatsApp" : dernier.canal === "sms" ? "SMS" : "Email"))
     ),
 
-    vide && h("div", { style: { fontSize: 12, color: C.orange, background: "rgba(224,144,48,.1)", border: "1px solid rgba(224,144,48,.25)", borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.5 } },
+    vide && h("div", { style: { fontSize: 12, color: C.orange, background: C.orangePale, border: `1px solid ${C.orangeBord}`, borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.5 } },
       "Aucun compte-rendu cette semaine : le bilan ne mentionnera que la présence. Passez par l'onglet Suivi pour l'enrichir."),
 
     !vide && h("div", { style: { fontSize: 12, color: C.gray, marginBottom: 10, lineHeight: 1.6 } },
       donnees.notions.length ? h("div", null, h("span", { style: { color: C.gold, fontWeight: 700 } }, "Travaillé : "), donnees.notions.join(", ")) : null,
       donnees.difficultes.length ? h("div", null, h("span", { style: { color: C.orange, fontWeight: 700 } }, "À consolider : "), donnees.difficultes.join(" ")) : null),
 
-    apercu && h("div", { style: { background: "rgba(0,0,0,.4)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8, padding: 11, marginBottom: 10, fontSize: 12, color: C.cream, lineHeight: 1.6, whiteSpace: "pre-line" } },
+    apercu && h("div", { style: { background: C.surface2, border: `1px solid ${C.bord}`, borderRadius: 8, padding: 11, marginBottom: 10, fontSize: 12, color: C.texte, lineHeight: 1.6, whiteSpace: "pre-line" } },
       apercu === "email" ? h("div", { style: { fontSize: 11, color: C.gold, fontWeight: 700, marginBottom: 6 } }, "Objet : " + mail.sujet) : null,
       apercu === "whatsapp" ? txtWA : apercu === "sms" ? txtSMS : mail.corps,
       h("button", {
@@ -142,11 +142,11 @@ function CarteBilan({ eleve, donnees, envois, onEnvoi }) {
       ["whatsapp", "sms", "email"].map(k => h("button", {
         key: k,
         onClick: () => setApercu(apercu === k ? null : k),
-        style: { flex: 1, background: apercu === k ? "rgba(212,175,55,.18)" : "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "7px 4px", color: apercu === k ? C.gold : C.gray, cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }
+        style: { flex: 1, background: apercu === k ? C.navyPale : C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "7px 4px", color: apercu === k ? C.gold : C.gray, cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }
       }, "👁 " + (k === "whatsapp" ? "WA" : k === "sms" ? "SMS" : "Mail"))),
       h("button", {
         onClick: copier,
-        style: { flex: 1, background: copie ? "rgba(76,175,125,.25)" : "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "7px 4px", color: copie ? C.green : C.gray, cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }
+        style: { flex: 1, background: copie ? C.greenPale : C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "7px 4px", color: copie ? C.green : C.gray, cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }
       }, copie ? "✅ Copié" : "📋 Copier")
     ),
 
@@ -196,18 +196,18 @@ function ModuleBilans({ eleves, groupes, appels, comptesRendus, bilans, monProfi
   const semaineCourante = lundi === lundiDe(todayStr());
 
   return h("div", null,
-    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(212,175,55,.08)", border: "1px solid rgba(212,175,55,.2)", borderRadius: 14, padding: "10px 12px", marginBottom: 14 } },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 14, padding: "10px 12px", marginBottom: 14 } },
       h("button", {
         onClick: () => setLundi(addJours(lundi, -7)),
-        style: { background: "rgba(255,255,255,.07)", border: "none", borderRadius: 8, padding: "8px 12px", color: C.gold, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }
+        style: { background: C.surface, border: "none", borderRadius: 8, padding: "8px 12px", color: C.gold, cursor: "pointer", fontSize: 16, fontFamily: "inherit" }
       }, "‹"),
       h("div", { style: { flex: 1, textAlign: "center" } },
-        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.cream, fontFamily: FD } }, libelleSemaine(lundi)),
+        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.texte, fontFamily: FD } }, libelleSemaine(lundi)),
         h("div", { style: { fontSize: 11, color: C.gray } }, semaineCourante ? "Semaine en cours" : "Semaine " + semaineId.split("-W")[1])),
       h("button", {
         onClick: () => setLundi(addJours(lundi, 7)),
         disabled: semaineCourante,
-        style: { background: "rgba(255,255,255,.07)", border: "none", borderRadius: 8, padding: "8px 12px", color: semaineCourante ? "rgba(255,255,255,.15)" : C.gold, cursor: semaineCourante ? "default" : "pointer", fontSize: 16, fontFamily: "inherit" }
+        style: { background: C.surface, border: "none", borderRadius: 8, padding: "8px 12px", color: semaineCourante ? C.grisClair : C.gold, cursor: semaineCourante ? "default" : "pointer", fontSize: 16, fontFamily: "inherit" }
       }, "›")
     ),
 
@@ -217,7 +217,7 @@ function ModuleBilans({ eleves, groupes, appels, comptesRendus, bilans, monProfi
         { e: "✅", v: `${nbEnvoyes}/${lignes.length}`, l: "Envoyés", c: C.green }
       ].map((s, i) => h("div", {
         key: i,
-        style: { background: "rgba(212,175,55,.08)", border: "1px solid rgba(212,175,55,.15)", borderRadius: 12, padding: "12px 8px", textAlign: "center" }
+        style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "13px 8px", textAlign: "center" }
       },
         h("div", { style: { fontSize: 18, marginBottom: 2 } }, s.e),
         h("div", { style: { fontSize: 16, fontWeight: 800, color: s.c, fontFamily: FD } }, s.v),

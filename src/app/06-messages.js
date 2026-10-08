@@ -20,10 +20,12 @@ const mentionAutomatique = seuil =>
 
 const signatureBoost = "Fouad Elmkhanter — Boost'Étude";
 
-const makeFactureEmail = (e, mois, nb, total, dates, seuil) => ({
+// Un stage se vend au forfait : il n'y a pas de séances à compter, seulement un
+// libellé et un prix. `prestation`, quand elle est là, remplace le décompte.
+const makeFactureEmail = (e, mois, nb, total, dates, seuil, prestation) => ({
   sujet: `Facture ${mois} — ${e.prenom} ${e.nom} — Boost'Étude`,
   corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
-         `Séances : ${nb} × 2 h × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n` +
+         (prestation ? `${prestation}\n` : `Séances : ${nb} × 2 h × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
          `TOTAL : ${montantTxt(total)}\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
          `La facture détaillée est jointe en PDF.\n\n` +
@@ -31,24 +33,28 @@ const makeFactureEmail = (e, mois, nb, total, dates, seuil) => ({
          `— ${mentionAutomatique(seuil)}`
 });
 
-const makeFactureSMS = (e, mois, nb, total, seuil) =>
+const makeFactureSMS = (e, mois, nb, total, seuil, prestation) =>
   `Boost'Étude — Facture ${mois}\n` +
-  `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n` +
+  (prestation
+    ? `Bonjour, voici la facture de ${e.prenom} — ${prestation} : ${montantTxt(total)}.\n`
+    : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n`) +
   `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}).\n` +
   `${mentionAutomatique(seuil)}`;
 
 // WhatsApp accepte un balisage léger : *gras* et _italique_. Le PDF part à côté,
 // par le partage du téléphone — un message seul ne peut pas l'emporter.
-const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil) => {
+const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation) => {
   const detail = groupParMatiere(dates || []);
-  const lignes = detail.length > 1
+  const lignes = prestation ? "" : detail.length > 1
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
     : "";
   return `*Boost'Étude — Facture ${mois}*\n\n` +
          `Bonjour ${e.parent},\n\n` +
          `Voici la facture de ${e.prenom} :\n` +
          lignes +
-         `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n` +
+         (prestation
+           ? `• ${prestation}\n`
+           : `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n`) +
          `• *Total : ${montantTxt(total)}*\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
          `La facture détaillée est jointe en PDF.\n\n` +
@@ -73,3 +79,20 @@ const {
   useState,
   useEffect
 } = React;
+
+// Relance : courtoise, précise, et qui rappelle ce qui a déjà été versé — un
+// parent qui a donné un acompte n'aime pas qu'on lui réclame la somme entière.
+const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse) => {
+  const detail = groupParMatiere(dates || []);
+  const lignes = detail.length > 1
+    ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
+    : "";
+  return `*Boost'Étude — Rappel ${reference || ""}*`.trim() + "\n\n" +
+         `Bonjour ${e.parent},\n\n` +
+         `Un petit rappel au sujet de la facture de ${e.prenom} :\n` +
+         lignes +
+         ((dejaVerse || 0) > 0 ? `• Déjà versé : ${montantTxt(dejaVerse)}\n` : "") +
+         `• *Reste à régler : ${montantTxt(reste)}*\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
+         `Merci d'avance,\n${signatureBoost}`;
+};
