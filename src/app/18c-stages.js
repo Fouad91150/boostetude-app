@@ -215,6 +215,18 @@ function ModuleStages({
     setFacturation(null);
   };
 
+  // Un stage sans inscrit se supprime ; dès qu'un élève y figure, il faut le
+  // retirer d'abord — on n'efface pas une ligne dont dépend une facture.
+  const supprimer = async stage => {
+    if (!confirm(`Supprimer le stage « ${stage.nom} » ?\n\nCette suppression est définitive.`)) return;
+    try {
+      await onSupprimerStage(stage.id);
+      signalerSucces("Stage supprimé.");
+    } catch (e) {
+      signalerErreur(e);
+    }
+  };
+
   const desinscrire = async (inscription, el) => {
     if (inscription.factureId) {
       signalerErreur({ message: "Cet élève est déjà facturé : annulez d'abord sa facture dans Factures." });
@@ -310,7 +322,14 @@ function ModuleStages({
               icone: deplie ? "▴" : "👥", onClick: () => setOuvert(deplie ? null : stage.id)
             })
           : null,
-        h(BtnLigne, { label: "Modifier", icone: "✏️", onClick: () => setVue({ k: "form", stage }) })),
+        h(BtnLigne, { label: "Modifier", icone: "✏️", onClick: () => setVue({ k: "form", stage }) }),
+        b.ins.length === 0
+          ? h(BtnLigne, {
+              label: "Supprimer", icone: "🗑",
+              teinte: C.red, fond: C.redPale, bord: C.redBord,
+              onClick: () => supprimer(stage)
+            })
+          : null),
 
       deplie
         ? h("div", { style: { marginTop: 10, display: "flex", flexDirection: "column", gap: 1 } },

@@ -216,6 +216,10 @@ function App() {
     await api.saveStage(form);
     await rechargerStages();
   };
+  const handleSupprimerStage = async id => {
+    await api.supprimerStage(id);
+    await rechargerStages();
+  };
   const handleInscrireStage = async (stageId, eleveId, tarif) => {
     await api.inscrireAuStage(stageId, eleveId, tarif);
     await rechargerStages();
@@ -521,6 +525,16 @@ function App() {
     comptesRendus: comptesRendus,
     monProfilId: monProfil && monProfil.id ? monProfil.id : null,
     onSave: handleSaveComptesRendus
+  }), tab === "stages" && isAdmin && /*#__PURE__*/React.createElement(ModuleStages, {
+    stages: stages,
+    inscrits: inscrits,
+    eleves: eleves,
+    factures: factures,
+    onSaveStage: handleSaveStage,
+    onSupprimerStage: handleSupprimerStage,
+    onInscrire: handleInscrireStage,
+    onDesinscrire: handleDesinscrireStage,
+    onFacturerStage: handleFacturerStage
   }), tab === "reglages" && isAdmin && /*#__PURE__*/React.createElement(ModuleReglages, {
     parametres: parametres,
     eleves: eleves,
