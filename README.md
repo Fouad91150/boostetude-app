@@ -135,3 +135,4 @@ bilans envoyés : rien de ce que montrent les écrans ne remonte plus loin. Sans
 cette borne, l'application téléchargeait tout l'historique à chaque ouverture —
 sans effet à vingt élèves, plusieurs milliers de lignes après quelques années, en
 4G, avant d'afficher le premier écran.
+<!-- 3.1.0 -->
