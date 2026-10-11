@@ -12,6 +12,7 @@
   "08-connexion.js",
   "08b-mon-compte.js",
   "09-panneau-envoi.js",
+  "09b-alerte-absences.js",
   "10-formulaire-groupe.js",
   "11-formulaire-eleve.js",
   "12-fiche-eleve.js",

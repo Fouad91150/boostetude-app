@@ -125,7 +125,23 @@ describe("Écran Réglages", () => {
     const html = rendre(app.OngletLivreRecettes, { factures, eleves: [eleveType] });
     assert.ok(contient(html, "F2026-0001"), "la facture encaissée doit apparaître");
     assert.ok(!contient(html, "F2026-0002"), "une facture émise non payée n'est pas une recette");
-    assert.ok(contient(html, "100,00€"), "le total des recettes doit être de 100 €");
+    assert.ok(contient(html, "100,00 €"), "le total des recettes doit être de 100 €");
+  });
+
+  test("le livre des recettes suit l'argent reçu, versement par versement", () => {
+    const an = String(new Date().getFullYear());
+    const factures = [
+      factureType({ id: "a", numero: "F2026-0001", statut: "partiel", montant: 100 }),
+      factureType({ id: "b", numero: null, statut: "paye", montant: 60, datePaiement: `${an}-01-20` })
+    ];
+    const encaissements = [
+      { id: "v1", factureId: "a", date: `${an}-01-05`, montant: 40, mode: "Espèces" },
+      { id: "v2", factureId: "b", date: `${an}-01-20`, montant: 60, mode: "Virement" }
+    ];
+    const html = rendre(app.OngletLivreRecettes, { factures, eleves: [eleveType], encaissements });
+    assert.ok(contient(html, "F2026-0001"), "un acompte sur une facture émise est une recette");
+    assert.ok(contient(html, "brouillon"), "un brouillon encaissé aussi");
+    assert.ok(contient(html, "100,00 €"), "40 € + 60 € reçus");
   });
 });
 
@@ -143,5 +159,25 @@ describe("Export CSV", () => {
   test("une valeur absente devient une cellule vide, jamais « undefined »", () => {
     const csv = app.versCSV([{ titre: "X", valeur: l => l.manquant }], [{}]);
     assert.ok(!csv.includes("undefined"));
+  });
+});
+
+describe("Facture figée", () => {
+  // Émise à 100 € (4 séances × 2 h × 12,50 €) quand l'élève était au collège ;
+  // l'élève est depuis passé en 2nde (15 €/h). La facture ne doit pas bouger.
+  const dates = ["2026-09-01", "2026-09-08", "2026-09-15", "2026-09-22"].map(date => ({ date, matiere: "Mathématiques" }));
+  const facture = factureType({ numero: "F2026-0009", dateEmission: "2026-09-30", montant: 100, nbSeances: 4, datesSeances: dates });
+  const eleve = { ...eleveType, niveau: "2nde", th: 15 };
+
+  test("ses lignes reprennent le tarif du montant figé, pas la fiche actuelle", () => {
+    const html = rendre(app.VueImpression, { facture, eleve, parametres: parametresComplets, onClose() {}, onEmettre() {} });
+    assert.ok(contient(html, "12,50"), "le tarif facturé doit apparaître");
+    assert.ok(!contient(html, "120,00"), "aucune ligne ne doit dépasser le total");
+  });
+
+  test("ses versements se déduisent à l'écran comme sur le PDF", () => {
+    const html = rendre(app.VueImpression, { facture: { ...facture, encaisse: 40 }, eleve, parametres: parametresComplets, onClose() {}, onEmettre() {} });
+    assert.ok(contient(html, "RESTE À PAYER"));
+    assert.ok(contient(html, "60,00"));
   });
 });

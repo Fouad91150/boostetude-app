@@ -80,6 +80,10 @@ function ModuleAppel({
     return { pres: p, repris: false };
   };
   const ouvrir = g => {
+    if (estFuture(date)) {
+      signalerErreur(`Le ${fmtDateLongue(date)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
+      return;
+    }
     setGrp(g);
     const { pres: p, repris } = etatPour(g, date);
     setPres(p);
@@ -109,9 +113,29 @@ function ModuleAppel({
   const nbP = Object.values(pres).filter(s => s === "present").length;
   const nbAJ = Object.values(pres).filter(s => s === "absent_j").length;
   const nbAN = Object.values(pres).filter(s => s === "absent_nj").length;
+  // Absences répétées : on compte avec l'appel en cours de saisie, pour que
+  // l'alerte tombe dès la séance qui fait franchir le palier.
+  const alertesAbs = grp ? (() => {
+    const avecCetAppel = { ...appels, [`ap:${grp.id}:${date}`]: pres };
+    return (grp.eids || []).map(eid => {
+      const e = elevesMap[eid];
+      const a = e && pres[eid] === "absent_nj" ? alerteAbsences(eid, avecCetAppel, date) : null;
+      return a ? { eleve: e, ...a } : null;
+    }).filter(Boolean);
+  })() : [];
+  const idsAlerte = alertesAbs.map(a => a.eleve.id);
   // Un groupe sans inscrit est une place tenue pour plus tard, pas une séance à
   // pointer. Il quitte la liste principale sans disparaître de l'application.
-  const groupesTenus = groupes.filter(g => (g.eids || []).length > 0);
+  // Les groupes qui ont cours ce jour-là passent en tête : le bon groupe est
+  // sous le pouce, et un groupe pointé un autre jour que le sien se remarque.
+  const jourChoisi = jourDeLaDate(date);
+  const horsJour = g => !!g.jour && g.jour !== jourChoisi;
+  const groupesTenus = groupes.filter(g => (g.eids || []).length > 0)
+    .sort((a, b) => (horsJour(a) ? 1 : 0) - (horsJour(b) ? 1 : 0));
+  // Si aucun groupe n'a cours ce jour-là, une seule ligne le dit (plutôt qu'un
+  // avertissement sur chaque carte).
+  const avecJour = groupesTenus.filter(g => g.jour);
+  const aucunCeJour = avecJour.length > 0 && avecJour.every(horsJour);
   const groupesVides = groupes.filter(g => (g.eids || []).length === 0);
   if (etape === "groupes") return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -126,6 +150,7 @@ function ModuleAppel({
   }), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: date,
+    max: todayStr(),
     onChange: e => setDate(e.target.value),
     style: {
       width: "100%",
@@ -150,7 +175,17 @@ function ModuleAppel({
     weekday: "long",
     day: "numeric",
     month: "long"
-  }))), /*#__PURE__*/React.createElement("div", {
+  })), !estFuture(date) && aucunCeJour && h("div", {
+    style: { marginTop: 8, fontSize: 13, color: C.orange, fontWeight: 600 }
+  }, `Aucun groupe n'a cours le ${jourChoisi.toLowerCase()} — vérifiez la date avant de faire l'appel.`), estFuture(date) && h("div", {
+    style: { marginTop: 10, padding: "10px 12px", borderRadius: 10, background: C.redPale,
+      border: `1px solid ${C.redBord}`, color: C.red, fontSize: 13, fontWeight: 600 }
+  }, "⚠️ Cette date est à venir. L'appel se fait le jour de la séance. ",
+    h("button", {
+      onClick: () => setDate(todayStr()),
+      style: { background: "none", border: "none", padding: 0, color: C.red, fontWeight: 800,
+        textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }
+    }, "Revenir à aujourd'hui"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
@@ -223,7 +258,10 @@ function ModuleAppel({
         fontSize: 12,
         color: C.gray
       }
-    }, horaireLabel(g), " • ", (g.eids || []).length, "/", g.max, " élèves")), fait ? /*#__PURE__*/React.createElement("span", {
+    }, horaireLabel(g), " • ", (g.eids || []).length, "/", g.max, " élèves"),
+      horsJour(g) && !fait && !aucunCeJour && h("div", {
+        style: { fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 4 }
+      }, `Cours habituel le ${g.jour.toLowerCase()} — vérifiez la date`)), fait ? /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
         fontWeight: 700,
@@ -372,6 +410,23 @@ function ModuleAppel({
           style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap" }
         }, "✏️ Corriger")),
 
+      // Un élève vient d'atteindre 3, 6, 9… absences non justifiées : on le dit
+      // tout de suite, c'est le moment où le prof a le téléphone en main.
+      alertesAbs.length > 0 && h("div", {
+        style: {
+          background: C.redPale, border: `1px solid ${C.redBord}`, borderRadius: 12,
+          padding: "12px 14px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10
+        }
+      },
+        h("span", { style: { fontSize: 20 } }, "🚨"),
+        h("div", { style: { flex: 1, fontSize: 13, color: C.texte, lineHeight: 1.45 } },
+          alertesAbs.map((a, i) => h("div", { key: a.eleve.id },
+            h("b", null, a.eleve.prenom, " ", a.eleve.nom), ` : ${a.nb} absences non justifiées depuis la rentrée`))),
+        h("button", {
+          onClick: () => { setEtape("appel"); setOnglet("parents"); },
+          style: { background: C.red, border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", padding: "8px 10px", whiteSpace: "nowrap" }
+        }, "Prévenir →")),
+
       presentsIds.length === 0
         ? h("div", { style: { textAlign: "center", padding: "20px 0 28px", color: C.gray, fontSize: 13 } },
             "Personne n'était présent : il n'y a pas de compte rendu à écrire.")
@@ -460,7 +515,7 @@ function ModuleAppel({
     l: "🕐 Historique"
   }, {
     k: "parents",
-    l: `✉️ Parents${absents.length > 0 ? ` (${absents.length})` : ""}`
+    l: `${alertesAbs.length > 0 ? "🚨" : "✉️"} Parents${absents.length > 0 ? ` (${absents.length})` : ""}`
   }].map(({
     k,
     l
@@ -737,7 +792,11 @@ function ModuleAppel({
         }
       }, st === "present" ? "✅" : st === "absent_j" ? "📋" : "❌", " ", e.prenom);
     })));
-  })), onglet === "parents" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  })), onglet === "parents" && /*#__PURE__*/React.createElement("div", null, alertesAbs.length > 0 && h("div", {
+    style: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }
+  }, h("div", { style: { fontSize: 13, fontWeight: 800, color: C.red } }, "🚨 Absences répétées"),
+    alertesAbs.map(a => h(CarteAlerteAbsences, { key: a.eleve.id, eleve: a.eleve, dates: a.dates, palier: a.palier, refDate: date }))),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: C.gray,
@@ -761,7 +820,7 @@ function ModuleAppel({
       gap: 12,
       paddingBottom: 20
     }
-  }, absents.map(eid => {
+  }, absents.filter(eid => !idsAlerte.includes(eid)).map(eid => {
     const e = elevesMap[eid];
     if (!e) return null;
     const st = pres[eid];

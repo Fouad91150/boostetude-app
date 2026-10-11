@@ -127,6 +127,19 @@ sert à deux choses : signaler dans Facturation les élèves qui l'ont atteint, 
 annoncer au parent « message automatique envoyé toutes les N séances ». Rien n'est
 émis tout seul — c'est un signalement, la décision reste humaine.
 
+## Alerte absences répétées
+
+À la **3e absence non justifiée** depuis la rentrée (1er septembre), puis à la 6e,
+la 9e…, l'élève est signalé (`09b-alerte-absences.js`) :
+
+- sur l'écran qui suit l'appel, avec un bouton « Prévenir → » ;
+- dans l'onglet **Parents** de l'appel, avec un message dédié (WhatsApp / SMS / email
+  listant les dates) ;
+- sur l'**Accueil**, tant que le parent n'a pas été marqué « prévenu ».
+
+Les absences justifiées ne déclenchent rien. « Parent prévenu » est mémorisé sur
+l'appareil (stockage local), par élève et par palier.
+
 ## Volumétrie
 
 Le chargement initial est borné à **douze mois glissants** pour les cours, les
@@ -135,3 +148,35 @@ bilans envoyés : rien de ce que montrent les écrans ne remonte plus loin. Sans
 cette borne, l'application téléchargeait tout l'historique à chaque ouverture —
 sans effet à vingt élèves, plusieurs milliers de lignes après quelques années, en
 4G, avant d'afficher le premier écran.
+
+## 3.4.0 — passe d'auto-amélioration (11 octobre 2026)
+
+Trois cycles audit → correction → ré-audit, chaque correction verrouillée par un test.
+
+**Argent**
+- Facturation **séance par séance** (clé date + groupe) : plus aucune séance perdue
+  (physique du même jour, appel saisi en retard, élève qui change de groupe), et
+  renommer une matière ne refacture rien.
+- Les appels saisis par les **collègues** sont rattrapés au chargement par
+  l'administrateur (ajout seulement, jamais de retrait).
+- **Livre des recettes** construit sur les versements reçus (acomptes, brouillons
+  encaissés), filtrable par année, total du mois : c'est le chiffre URSSAF.
+- Facture imprimée et PDF lisent le tarif dans le **montant figé**, et déduisent tous
+  deux les versements.
+- Une facture **émise** ou **déjà encaissée** ne se supprime plus — ni à l'écran, ni en
+  base (déclencheur `facture_emise_indelebile`).
+- Accueil, badge Factures et histogramme « encaissé » : chiffres justes (annulées
+  exclues, acomptes déduits, une seule source pour l'encaissé).
+- Les factures de stage apparaissent dans « à envoyer ».
+
+**Dates**
+- Calcul au calendrier local : en France, les semaines des bilans commençaient le
+  dimanche (`toISOString()` passait en UTC). Tests rejoués sous cinq fuseaux.
+- Appel daté dans le futur refusé ; groupe pointé hors de son jour signalé ; les
+  séances à venir ne comptent ni comme absences ni comme heures de professeur.
+
+**Robustesse et sécurité**
+- Chargement **paginé** au-delà de 1 000 lignes (plafond Supabase).
+- Fonctions de base fermées au public : `detecter_rappels` exposait prénoms et
+  téléphones des parents à quiconque détenait la clé publique.
+- `.gitignore` : `node_modules/` et `.apercu/` (données réelles) ne partent jamais sur GitHub.

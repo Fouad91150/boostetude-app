@@ -83,6 +83,16 @@ function App() {
       setGroupes(gr);
       setAppels(ap);
       setFactures(fa);
+      if (role === "admin") {
+        // Rattrape les appels enregistrés par les collègues (voir brouillonsEnRetard).
+        const retards = brouillonsEnRetard(el, gr, ap, fa);
+        if (retards.length) {
+          try {
+            for (const r of retards) await api.syncFacture(r.eid, r.dates, r.montant);
+            setFactures((await api.fetchAll(true)).factures);
+          } catch (e) {/* non bloquant : l'appel suivant de l'administrateur rattrapera */}
+        }
+      }
       setComptesRendus(await api.fetchComptesRendus());
       if (role === "admin") {
         setEncaissements(await api.fetchEncaissements().catch(() => []));
@@ -161,7 +171,7 @@ function App() {
       for (const eid of grp.eids || []) {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
-        const depuis = dernierePeriodeFin(eid, fa);
+        const depuis = dejaFacturees(eid, fa);
         const dates = seancesOuvertes(eid, ap, gr, depuis);
         const montant = parseFloat((dates.length * 2 * ele.th).toFixed(2));
         await api.syncFacture(eid, dates, montant);
@@ -309,8 +319,12 @@ function App() {
     full: true
   })));
   const isAdmin = monRole === "admin";
-  const nbAbsNJ = Object.entries(appels).filter(([k]) => k.split(":")[2]?.startsWith(nowYM())).reduce((s, [, p]) => s + Object.values(p).filter(v => v === "absent_nj").length, 0);
-  const nbImpayes = factures.filter(f => f.statut === "en_attente" || f.statut === "impaye").length;
+  const nbAbsNJ = Object.entries(appels).filter(([k]) => k.split(":")[2]?.startsWith(nowYM()) && !estFuture(k.split(":")[2])).reduce((s, [, p]) => s + Object.values(p).filter(v => v === "absent_nj").length, 0);
+  // Badge Factures = ce qui demande un geste : brouillons arrivés au seuil (à
+  // envoyer) et factures émises qui attendent encore un règlement.
+  const seuilFact = Math.max(1, parseInt(parametres?.seuil_facturation, 10) || SEUIL_FACTURATION_DEFAUT);
+  const nbImpayes = factures.filter(f => f.statut !== "annulee" && f.statut !== "paye" && (
+    f.numero ? resteDu(f) > 0 : f.stageId || (f.nbSeances || 0) >= seuilFact)).length;
   // Un inscrit sans facture valide, c'est une recette qui dort : le badge le dit.
   const nbStagesAFacturer = inscrits.filter(i => {
     if (!i.factureId) return true;
@@ -482,7 +496,8 @@ function App() {
     eleves: eleves,
     groupes: groupes,
     appels: appels,
-    factures: factures
+    factures: factures,
+    encaissements: encaissements
   }), tab === "eleves" && isAdmin && /*#__PURE__*/React.createElement(ModuleEleves, {
     eleves: eleves,
     groupes: groupes,
@@ -541,6 +556,7 @@ function App() {
     groupes: groupes,
     appels: appels,
     factures: factures,
+    encaissements: encaissements,
     profs: profs,
     onSaveParametres: handleSaveParametres,
     onExportComplet: handleExportComplet,

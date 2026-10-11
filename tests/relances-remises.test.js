@@ -12,7 +12,7 @@ import { chargerApp, eleveType, factureType, parametresComplets } from "./charge
 const ilYa = n => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
 const ELEVE = (extra = {}) => ({ ...eleveType, id: "e1", tel: "06 12 34 56 78", ...extra });

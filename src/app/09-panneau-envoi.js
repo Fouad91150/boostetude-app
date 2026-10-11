@@ -25,28 +25,34 @@ function PanneauEnvoi({
 }) {
   // Pour une absence, l'aperçu s'ouvre par défaut : la formulation exacte doit être
   // visible avant l'envoi, pas seulement accessible via l'œil.
-  const [apercu, setApercu] = useState(type === "absence" ? "email" : null);
+  const [apercu, setApercu] = useState(type === "absence" || type === "alerte_absences" ? "email" : null);
   const [copie, setCopie] = useState(null);
   const [envoiPDF, setEnvoiPDF] = useState(false);
 
   const isF = type === "facture";
   const isA = type === "absence";
-  const accent = isF ? C.green : isA ? C.blue : C.orange;
-  const fondBase = isF ? C.greenPale : isA ? C.bluePale : C.orangePale;
-  const bordBase = isF ? C.greenBord : isA ? C.blueBord : C.orangeBord;
+  // Absences répétées : `dates` porte alors les dates d'absence, pas de séance.
+  const isAl = type === "alerte_absences";
+  const accent = isF ? C.green : isA ? C.blue : isAl ? C.red : C.orange;
+  const fondBase = isF ? C.greenPale : isA ? C.bluePale : isAl ? C.redPale : C.orangePale;
+  const bordBase = isF ? C.greenBord : isA ? C.blueBord : isAl ? C.redBord : C.orangeBord;
 
   // Forfait de stage : le message annonce la prestation, pas un décompte de séances.
   const forfait = (facture && facture.prestation) || null;
 
   const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil, forfait)
     : isA ? makeAbsenceEmail(eleve, mois, justifie)
+    : isAl ? makeAlerteAbsencesEmail(eleve, dates || [])
     : makeRappelEmail(eleve, mois, montant, dates);
   const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant, seuil, forfait)
     : isA ? makeAbsenceSMS(eleve, mois, justifie)
+    : isAl ? makeAlerteAbsencesSMS(eleve, dates || [])
     : makeRappelSMS(eleve, mois, montant);
   // WhatsApp accepte un texte plus long et un balisage léger : on lui donne la
   // version soignée plutôt que le SMS tronqué.
-  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait) : smsText;
+  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait)
+    : isAl ? makeAlerteAbsencesWhatsApp(eleve, dates || [])
+    : smsText;
 
   const tel = (eleve.tel || "").replace(/\s/g, "");
   const hrefEmail = `mailto:${eleve.email}?subject=${encodeURIComponent(emailData.sujet)}&body=${encodeURIComponent(emailData.corps)}`;
@@ -144,7 +150,7 @@ function PanneauEnvoi({
       borderRadius: 12, padding: 12, marginTop: 8
     }
   },
-    h(Lbl, { text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : "📨 Rappel paiement" }),
+    h(Lbl, { text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : isAl ? "🚨 Alerter le parent" : "📨 Rappel paiement" }),
 
     // ── Le fichier : un geste à part, le seul qui emporte vraiment la facture ──
     pdfPossible && h("div", { style: { display: "flex", gap: 6, marginBottom: 10 } },

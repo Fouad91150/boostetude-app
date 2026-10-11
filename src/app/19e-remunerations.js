@@ -19,7 +19,7 @@ const seancesDuMois = (profId, ym, appels, groupes) => {
   return Object.entries(appels || {})
     .filter(([cle, presences]) => {
       const [tag, groupeId, date] = cle.split(":");
-      if (tag !== "ap" || !date || !date.startsWith(ym)) return false;
+      if (tag !== "ap" || !date || !date.startsWith(ym) || estFuture(date)) return false;
       if (!siens.includes(groupeId)) return false;
       return Object.values(presences || {}).some(Boolean);
     })
@@ -65,8 +65,8 @@ const makeRemunerationWhatsApp = (prof, ym, seances, heures, montant, taux) =>
   `Merci pour ton travail de ce mois-ci.\n` +
   `Fouad Elmkhanter — Boost'Étude`;
 
-function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel }) {
-  const [mois, setMois] = useState(nowYM());
+function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial }) {
+  const [mois, setMois] = useState(moisInitial || nowYM());
   const [edition, setEdition] = useState(null);   // { id, champ, valeur }
   const [deplie, setDeplie] = useState(null);
   const [envoi, setEnvoi] = useState(null);

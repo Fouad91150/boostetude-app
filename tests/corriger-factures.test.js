@@ -144,3 +144,34 @@ describe("Partage depuis Gérer", () => {
     assert.ok(bloc.includes("partagerFacturePDF"), "et le fichier est le PDF de la facture");
   });
 });
+
+describe("La carte d'un élève et le total en cours", () => {
+  const rendreEnCours = (factures, encaissements = []) => {
+    const { ModuleFacturation } = chargerApp();
+    return renderToStaticMarkup(React.createElement(ModuleFacturation, {
+      eleves: [ELEVE], groupes: [], appels: {}, factures,
+      parametres: { ...parametresComplets, seuil_facturation: 3 }, encaissements,
+      onSaveFacture: async () => {}, onDeleteFacture: async () => {},
+      onDeleteFactureEnCours: async () => {}, onEmettreFacture: async () => "F2026-0001",
+      onRecharger: async () => {}, onAjouterVersement: async () => {}, onSupprimerVersement: async () => {},
+      onAnnulerFacture: async () => {}, onRetablirFacture: async () => {}, onRelancer: async () => {}
+    }));
+  };
+
+  test("un stage ouvert ne masque pas le brouillon de cours", () => {
+    const html = rendreEnCours([
+      factureType({ id: "stage", eleveId: "e1", stageId: "s1", prestation: "Stage de Toussaint", nbSeances: 0, montant: 149 }),
+      factureType({ id: "cours", eleveId: "e1", nbSeances: 4, montant: 100 })
+    ]);
+    assert.ok(!html.includes("rien en attente"), "le brouillon de 4 séances doit apparaître");
+  });
+
+  test("le total en cours ignore les factures annulées et déduit les versements", () => {
+    const html = rendreEnCours([
+      factureType({ id: "x", eleveId: "e1", numero: "F2026-0001", statut: "annulee", montant: 100 }),
+      factureType({ id: "y", eleveId: "e1", numero: "F2026-0002", statut: "partiel", montant: 100, encaisse: 90 })
+    ]);
+    assert.ok(html.includes("10€") || html.includes("10 €"), "seuls 10 € restent dus");
+    assert.ok(!html.includes("200€"));
+  });
+});

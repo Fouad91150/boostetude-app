@@ -132,27 +132,49 @@ function OngletEntreprise({ parametres, onSave }) {
   );
 }
 
-function OngletLivreRecettes({ factures, eleves }) {
-  const annee = new Date().getFullYear();
-  const emises = factures.filter(f => f.numero).sort((a, b) => (a.numero || "").localeCompare(b.numero || ""));
-  const encaissees = emises.filter(f => f.statut === "paye" && f.datePaiement);
-  const total = encaissees.reduce((s, f) => s + Number(f.montant || 0), 0);
-  const nomDe = eid => {
-    const e = eleves.find(x => x.id === eid);
-    return e ? `${e.prenom} ${e.nom}` : "—";
+// Le livre des recettes d'un micro-entrepreneur enregistre l'ARGENT REÇU, à la
+// date où il est reçu — c'est aussi ce chiffre qui se déclare à l'URSSAF. Il se
+// construit donc versement par versement (table `encaissements`), et non à partir
+// des factures soldées : un acompte, une facture réglée en deux mois ou un
+// brouillon encaissé sans numéro en auraient disparu.
+const lignesRecettes = (encaissements, factures) => {
+  const factureDe = id => (factures || []).find(f => f.id === id);
+  const lignes = (encaissements || []).map(e => ({ id: e.id, date: e.date, montant: Number(e.montant) || 0, mode: e.mode, facture: factureDe(e.factureId) }));
+  // Factures soldées avant l'arrivée des versements (2.4.0) : une ligne chacune.
+  const avecVersement = new Set((encaissements || []).map(e => e.factureId));
+  (factures || []).filter(f => f.statut === "paye" && f.datePaiement && !avecVersement.has(f.id))
+    .forEach(f => lignes.push({ id: "f-" + f.id, date: f.datePaiement, montant: Number(f.montant) || 0, mode: f.mode, facture: f }));
+  return lignes.filter(l => l.date).sort((a, b) => a.date.localeCompare(b.date));
+};
+
+function OngletLivreRecettes({ factures, eleves, encaissements }) {
+  const toutes = lignesRecettes(encaissements, factures);
+  const annees = [...new Set([String(new Date().getFullYear()), ...toutes.map(l => l.date.slice(0, 4))])].sort().reverse();
+  const [annee, setAnnee] = useState(annees[0]);
+  const lignes = toutes.filter(l => l.date.startsWith(annee));
+  const total = lignes.reduce((s, l) => s + l.montant, 0);
+  const ceMois = toutes.filter(l => l.date.startsWith(nowYM())).reduce((s, l) => s + l.montant, 0);
+  const nomDe = f => {
+    const e = f && eleves.find(x => x.id === f.eleveId);
+    return e ? `${e.prenom} ${e.nom}`.trim() : "—";
   };
+  const nature = f => !f ? "Versement"
+    : f.prestation ? f.prestation
+    : `Cours de soutien scolaire — ${f.nbSeances || 0} séance(s)`;
+  const numero = f => !f ? "—" : f.numero || "brouillon";
+  const eur = n => n.toFixed(2).replace(".", ",") + " €";
 
   const exporter = () => {
     telechargerFichier(
       `livre-recettes-${annee}.csv`,
       versCSV([
-        { titre: "Date d'encaissement", valeur: f => f.datePaiement },
-        { titre: "N° de facture", valeur: f => f.numero },
-        { titre: "Client", valeur: f => nomDe(f.eleveId) },
-        { titre: "Nature", valeur: f => `Cours de soutien scolaire — ${f.nbSeances} séance(s)` },
-        { titre: "Montant (€)", valeur: f => String(f.montant).replace(".", ",") },
-        { titre: "Mode de règlement", valeur: f => f.mode }
-      ], encaissees),
+        { titre: "Date d'encaissement", valeur: l => l.date },
+        { titre: "N° de facture", valeur: l => numero(l.facture) },
+        { titre: "Client", valeur: l => nomDe(l.facture) },
+        { titre: "Nature", valeur: l => nature(l.facture) },
+        { titre: "Montant (€)", valeur: l => String(l.montant).replace(".", ",") },
+        { titre: "Mode de règlement", valeur: l => l.mode || "" }
+      ], lignes),
       "text/csv;charset=utf-8"
     );
   };
@@ -160,13 +182,21 @@ function OngletLivreRecettes({ factures, eleves }) {
   return h("div", null,
     h("div", { style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 12, padding: 13, marginBottom: 16, fontSize: 12, color: C.gray, lineHeight: 1.65 } },
       h("div", { style: { fontSize: 13, fontWeight: 800, color: C.gold, marginBottom: 5 } }, "Livre des recettes"),
-      "Registre chronologique des encaissements que tout micro-entrepreneur doit tenir. Il se remplit tout seul : une ligne par facture marquée payée."),
+      "Registre chronologique de l'argent reçu, que tout micro-entrepreneur doit tenir. Il se remplit tout seul : une ligne par versement enregistré avec « Encaisser ». C'est ce montant qui se déclare à l'URSSAF."),
+
+    annees.length > 1 && h("div", { style: { display: "flex", gap: 6, marginBottom: 12 } },
+      annees.map(a => h("button", {
+        key: a, onClick: () => setAnnee(a),
+        style: { background: a === annee ? C.navy : C.surface, color: a === annee ? "#fff" : C.gray,
+          border: `1px solid ${a === annee ? C.navy : C.bord}`, borderRadius: 999, padding: "5px 12px",
+          fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }
+      }, a))),
 
     h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 } },
       [
-        { e: "🧾", v: emises.length, l: "Émises", c: C.gold },
-        { e: "✅", v: encaissees.length, l: "Encaissées", c: C.green },
-        { e: "💰", v: total.toFixed(2).replace(".", ",") + "€", l: "Recettes", c: C.green }
+        { e: "🧾", v: lignes.length, l: "Versements", c: C.gold },
+        { e: "📅", v: eur(ceMois), l: "Ce mois", c: C.green },
+        { e: "💰", v: eur(total), l: "Année " + annee, c: C.green }
       ].map((s, i) => h("div", {
         key: i,
         style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "13px 8px", textAlign: "center" }
@@ -176,22 +206,23 @@ function OngletLivreRecettes({ factures, eleves }) {
         h("div", { style: { fontSize: 10, color: C.gray, fontWeight: 700, textTransform: "uppercase" } }, s.l)))
     ),
 
-    encaissees.length === 0
+    lignes.length === 0
       ? h("div", { style: { textAlign: "center", padding: "30px 20px", color: C.gray, fontSize: 13, lineHeight: 1.6 } },
-          "Aucune recette encaissée pour l'instant.", h("br", null),
-          "Une facture entre ici quand elle est émise puis marquée payée.")
+          "Aucune recette encaissée en " + annee + ".", h("br", null),
+          "Un versement entre ici dès qu'il est enregistré avec « Encaisser ».")
       : h("div", null,
           h("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 } },
-            encaissees.map(f => h("div", {
-              key: f.id,
+            lignes.map(l => h("div", {
+              key: l.id,
               style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
             },
               h("div", { style: { minWidth: 0 } },
-                h("div", { style: { fontSize: 13, fontWeight: 700, color: C.texte } }, f.numero, " · ", nomDe(f.eleveId)),
+                h("div", { style: { fontSize: 13, fontWeight: 700, color: C.texte } }, numero(l.facture), " · ", nomDe(l.facture)),
                 h("div", { style: { fontSize: 11, color: C.gray } },
-                  new Date(f.datePaiement + "T00:00:00").toLocaleDateString("fr-FR"), " · ", f.mode)),
-              h("span", { style: { fontSize: 14, fontWeight: 800, color: C.green, fontFamily: FD, whiteSpace: "nowrap" } }, f.montant, "€")))),
-          h(BtnPrimary, { label: "⬇️ Exporter le livre des recettes (CSV)", onClick: exporter, full: true })
+                  new Date(l.date + "T00:00:00").toLocaleDateString("fr-FR"), l.mode ? " · " + l.mode : "",
+                  l.facture && l.facture.statut === "annulee" ? " · facture annulée" : "")),
+              h("span", { style: { fontSize: 14, fontWeight: 800, color: C.green, fontFamily: FD, whiteSpace: "nowrap" } }, eur(l.montant))))),
+          h(BtnPrimary, { label: "⬇️ Exporter le livre des recettes " + annee + " (CSV)", onClick: exporter, full: true })
         )
   );
 }
@@ -215,7 +246,7 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
     try {
       const tout = await onExportComplet();
       telechargerFichier(
-        `sauvegarde-boostetude-${new Date().toISOString().slice(0, 10)}.json`,
+        `sauvegarde-boostetude-${todayStr()}.json`,
         JSON.stringify(tout, null, 2),
         "application/json"
       );
@@ -252,7 +283,7 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
   );
 }
 
-function ModuleReglages({ parametres, eleves, groupes, appels, factures, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel }) {
+function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaissements, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel }) {
   const [onglet, setOnglet] = useState("entreprise");
   const onglets = [
     { k: "entreprise", l: "🏛 Entreprise" },
@@ -275,7 +306,7 @@ function ModuleReglages({ parametres, eleves, groupes, appels, factures, profs, 
       }, l))),
     onglet === "entreprise" && h(OngletEntreprise, { parametres, onSave: onSaveParametres }),
     onglet === "profs" && h(OngletProfesseurs, { profs, groupes, appels, onSaveTaux, onSaveTel }),
-    onglet === "recettes" && h(OngletLivreRecettes, { factures, eleves }),
+    onglet === "recettes" && h(OngletLivreRecettes, { factures, eleves, encaissements }),
     onglet === "donnees" && h(OngletDonnees, { eleves, groupes, appels, factures, onExportComplet })
   );
 }

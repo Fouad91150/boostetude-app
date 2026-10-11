@@ -36,8 +36,8 @@ function FormulaireEleve({
     try {
       await onSave({
         id: initial?.id,
-        prenom,
-        nom,
+        prenom: prenom.trim(),
+        nom: nom.trim(),
         niveau,
         mp,
         email,

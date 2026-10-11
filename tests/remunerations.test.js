@@ -19,8 +19,12 @@ const PROF = (extra = {}) => ({
 const GROUPE = (extra = {}) => ({
   id: "g1", nom: "4e", niveau: "4ème", matiere: "Mathématiques", profId: "p1", eids: [], ...extra
 });
+// Le mois PRÉCÉDENT : toutes ses séances sont passées, quel que soit le jour
+// où l'on lance les tests (une séance à venir ne compte pas encore).
 const mois = () => {
   const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 const jour = n => `${mois()}-${String(n).padStart(2, "0")}`;
@@ -92,7 +96,7 @@ describe("L'écran des professeurs", () => {
   const rendre = (profs, groupes, appels) => {
     const { OngletProfesseurs } = chargerApp();
     return renderToStaticMarkup(React.createElement(OngletProfesseurs, {
-      profs, groupes, appels, onSaveTaux: async () => {}, onSaveTel: async () => {}
+      profs, groupes, appels, moisInitial: mois(), onSaveTaux: async () => {}, onSaveTel: async () => {}
     }));
   };
 
@@ -178,5 +182,15 @@ describe("Mon compte", () => {
 
   test("il porte aussi la déconnexion", () => {
     assert.ok(rendre().includes("Se déconnecter"));
+  });
+});
+
+describe("Une séance à venir", () => {
+  test("n'est pas encore assurée, donc pas encore due", () => {
+    const { seancesDuMois } = chargerApp();
+    const d = new Date(); d.setDate(d.getDate() + 3);
+    const futur = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const appels = { [`ap:g1:${futur}`]: { e1: "present" } };
+    assert.equal(seancesDuMois("p1", futur.slice(0, 7), appels, [GROUPE()]).length, 0);
   });
 });

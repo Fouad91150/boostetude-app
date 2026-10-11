@@ -12,9 +12,14 @@ const JOURS_CHAUD = 15;
 
 const joursDepuis = iso => {
   if (!iso) return 0;
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d)) return 0;
-  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+  // Écart en jours de calendrier, compté en UTC pur : ni le fuseau ni le
+  // passage à l'heure d'été (journée de 23 h) ne peuvent décaler le compte.
+  const [a, m, j] = String(iso).slice(0, 10).split("-").map(Number);
+  const debut = Date.UTC(a, m - 1, j);
+  if (isNaN(debut)) return 0;
+  const n = new Date();
+  const auj = Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
+  return Math.max(0, Math.round((auj - debut) / 86400000));
 };
 
 const tonRelance = jours =>

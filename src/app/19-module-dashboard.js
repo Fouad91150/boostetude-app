@@ -3,18 +3,28 @@ function ModuleDashboard({
   eleves,
   groupes,
   appels,
-  factures
+  factures,
+  encaissements
 }) {
   const [mois, setMois] = useState(nowYM());
   const actifs = eleves.filter(e => e.actif !== false);
-  const caYM = ym => factures.filter(f => f.mois === ym).reduce((s, f) => s + f.montant, 0);
+  // Facturé : toutes les factures du mois sauf les annulées.
+  const valides = factures.filter(f => f.statut !== "annulee");
+  const arrondi = n => Math.round(n * 100) / 100;
+  const caYM = ym => arrondi(valides.filter(f => f.mois === ym).reduce((s, f) => s + f.montant, 0));
   const caMois = caYM(mois);
-  const caPaye = factures.filter(f => f.mois === mois && f.statut === "paye").reduce((s, f) => s + f.montant, 0);
-  const impayes = factures.filter(f => f.statut === "en_attente" || f.statut === "impaye");
+  // Encaissé : l'argent reçu dans le mois, versement par versement.
+  // Même source que le livre des recettes : les deux chiffres ne divergent jamais.
+  const caPaye = arrondi(lignesRecettes(encaissements, factures)
+    .filter(l => l.date.startsWith(mois)).reduce((s, l) => s + l.montant, 0));
+  // Impayé = facture ÉMISE dont il reste quelque chose à recevoir (acomptes
+  // déduits). Un brouillon pas encore envoyé n'est l'impayé de personne.
+  const impayes = valides.filter(f => f.numero && resteDu(f) > 0);
+  const totalImpaye = arrondi(impayes.reduce((s, f) => s + resteDu(f), 0));
   const absM = [];
   Object.entries(appels).forEach(([k, p]) => {
     const parts = k.split(":");
-    if (parts[0] !== "ap" || !parts[2]?.startsWith(mois)) return;
+    if (parts[0] !== "ap" || !parts[2]?.startsWith(mois) || estFuture(parts[2])) return;
     Object.entries(p).forEach(([eid, s]) => {
       if (s !== "present") {
         const e = eleves.find(x => x.id === eid);
@@ -107,12 +117,15 @@ function ModuleDashboard({
       fontWeight: 700,
       color: C.orange
     }
-  }, impayes.reduce((s, f) => s + f.montant, 0), "€ en attente"), /*#__PURE__*/React.createElement("div", {
+  }, montantTxt(totalImpaye), " à encaisser"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: C.gray
     }
-  }, impayes.length, " facture", impayes.length > 1 ? "s" : "", " impayée", impayes.length > 1 ? "s" : "")))), /*#__PURE__*/React.createElement("div", {
+  }, impayes.length, " facture", impayes.length > 1 ? "s" : "", " émise", impayes.length > 1 ? "s" : "", " pas encore réglée", impayes.length > 1 ? "s" : "")))), h(BlocAlertesAbsences, {
+    eleves: actifs,
+    appels
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr",

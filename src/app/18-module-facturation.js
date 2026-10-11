@@ -38,6 +38,18 @@ function ModuleFacturation({
   // Renvoie true si la suppression a bien eu lieu (permet d'attendre la confirmation
   // avant de fermer une vue, ex. la fiche d'impression, sans la fermer si on annule).
   const handleDelete = async factureId => {
+    // Garde-fou : une facture numérotée ne disparaît jamais (trou dans la
+    // numérotation, versements effacés en cascade, présences supprimées).
+    const emise = factures.find(f => f.id === factureId && f.numero);
+    if (emise) {
+      signalerErreur(`La facture ${emise.numero} est émise : elle ne se supprime pas (son numéro doit rester dans la séquence). Utilisez « Annuler » dans Factures → Gérer.`);
+      return false;
+    }
+    const payee = factures.find(f => f.id === factureId && (Number(f.encaisse) > 0 || f.statut === "paye"));
+    if (payee) {
+      signalerErreur("Cette facture a reçu des versements : retirez-les d'abord (Encaisser → la croix). Ils figurent au livre des recettes.");
+      return false;
+    }
     if (!window.confirm("Supprimer définitivement cette facture ? Cette action est irréversible.")) return false;
     setSuppression(true);
     let ok = false;
@@ -55,6 +67,16 @@ function ModuleFacturation({
   // la ligne facture ne suffit pas, le même montant réapparaîtrait aussitôt. On retire donc
   // aussi les séances présentes sous-jacentes (utile pour nettoyer un test, par exemple).
   const handleDeleteEnCours = async (factureId, eleveId, dates) => {
+    const emise = factures.find(f => f.id === factureId && f.numero);
+    if (emise) {
+      signalerErreur(`La facture ${emise.numero} est émise : elle ne se supprime pas (son numéro doit rester dans la séquence). Utilisez « Annuler » dans Factures → Gérer.`);
+      return false;
+    }
+    const payee = factures.find(f => f.id === factureId && (Number(f.encaisse) > 0 || f.statut === "paye"));
+    if (payee) {
+      signalerErreur("Cette facture a reçu des versements : retirez-les d'abord (Encaisser → la croix). Ils figurent au livre des recettes.");
+      return false;
+    }
     if (!window.confirm("Supprimer ces séances de l'appel et la facture en cours associée ? Cette action retire ces séances de l'historique de présence et est irréversible.")) return false;
     setSuppression(true);
     let ok = false;
@@ -119,22 +141,34 @@ function ModuleFacturation({
   };
 
   const actifs = eleves.filter(e => e.actif !== false);
-  const ouvertes = factures.filter(f => f.statut !== "paye");
+  // Ouverte = ni soldée ni annulée. Une facture annulée n'est plus due.
+  const ouvertes = factures.filter(f => f.statut !== "paye" && f.statut !== "annulee");
   // Seuil de signalement, réglable dans Réglages (trois séances par défaut).
   const seuil = Math.max(1, parseInt(parametres?.seuil_facturation, 10) || SEUIL_FACTURATION_DEFAUT);
   // À facturer : la facture a atteint le seuil et n'a pas encore de numéro.
   const aFacturer = ouvertes
-    .filter(f => !f.numero && (f.nbSeances || 0) >= seuil && actifs.find(e => e.id === f.eleveId))
+    // Un forfait de stage se facture d'un bloc : il est à envoyer dès sa création.
+    .filter(f => !f.numero && (f.stageId || (f.nbSeances || 0) >= seuil) && actifs.find(e => e.id === f.eleveId))
     .sort((a, b) => (b.nbSeances || 0) - (a.nbSeances || 0));
   // Ce qui reste à encaisser sur des factures déjà parties chez les parents.
   const nbARelancer = aRelancer(factures, actifs).length;
-  const ouverteDe = eid => ouvertes.find(f => f.eleveId === eid);
+  // La carte d'un élève montre d'abord son brouillon de cours (celui que l'appel
+  // fait grossir) ; à défaut, la plus récente de ses factures restant dues. Avant,
+  // la première venue de la base gagnait : un stage pouvait masquer le brouillon.
+  const ouverteDe = eid => {
+    const siennes = ouvertes.filter(f => f.eleveId === eid);
+    return siennes.find(f => !f.numero && !f.stageId)
+      || siennes.sort((a, b) => (b.periodeFin || b.periodeDebut || "").localeCompare(a.periodeFin || a.periodeDebut || ""))[0];
+  };
   // Solde ouvert dont l'élève est désactivé ou n'existe plus : à traiter à part,
   // sinon il reste invisible et impossible à solder ou supprimer.
   const ouvertesOrphelines = ouvertes.filter(f => !actifs.find(e => e.id === f.eleveId));
-  const totalEnCours = ouvertes.reduce((s, f) => s + f.montant, 0);
+  // Ce qui reste réellement dû : versements déjà reçus déduits.
+  const totalEnCours = Math.round(ouvertes.reduce((s, f) => s + resteDu(f), 0) * 100) / 100;
   const payees = factures.filter(f => f.statut === "paye").sort((a, b) => (b.periodeFin || b.datePaiement || "").localeCompare(a.periodeFin || a.datePaiement || ""));
-  const caParMois = ym => payees.filter(f => (f.datePaiement || "").startsWith(ym)).reduce((s, f) => s + f.montant, 0);
+  // Encaissé = argent reçu dans le mois, versement par versement (acomptes compris).
+  const recettes = lignesRecettes(encaissements, factures);
+  const caParMois = ym => Math.round(recettes.filter(l => l.date.startsWith(ym)).reduce((s, l) => s + l.montant, 0) * 100) / 100;
   const histoCA = lastMonths(6).reverse().map(m => ({
     l: MOIS_C[+m.split("-")[1] - 1],
     v: caParMois(m)
@@ -227,7 +261,7 @@ function ModuleFacturation({
     h("div", { style: { fontSize: 15, fontWeight: 800, color: C.gold, fontFamily: FD, marginBottom: 3 } },
       `${aFacturer.length} facture${aFacturer.length > 1 ? "s" : ""} à envoyer`),
     h("div", { style: { fontSize: 12, color: C.gray, marginBottom: 10, lineHeight: 1.5 } },
-      `Ces élèves ont atteint ${seuil} séances. « Envoyer » émet la facture et ouvre le partage avec le PDF et le message — touchez le nom pour la relire avant.`),
+      `Ces élèves ont atteint ${seuil} séances (ou ont un stage à facturer). « Envoyer » émet la facture et ouvre le partage avec le PDF et le message — touchez le nom pour la relire avant.`),
     h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       aFacturer.map(f => {
         const el = eleveDe(f.eleveId);
@@ -252,7 +286,7 @@ function ModuleFacturation({
             h("div", { style: { fontSize: 13.5, fontWeight: 700, color: C.texte, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
               `${el.prenom} ${el.nom}`),
             h("div", { style: { fontSize: 11.5, color: C.gray, fontWeight: 600, marginTop: 1 } },
-              `${f.nbSeances} séance${f.nbSeances > 1 ? "s" : ""} • `,
+              f.prestation ? `${f.prestation} • ` : `${f.nbSeances} séance${f.nbSeances > 1 ? "s" : ""} • `,
               h("span", { style: { color: C.gold, fontWeight: 800 } }, `${f.montant} €`))),
           h("button", {
             onClick: () => emettreEtEnvoyer(f, el),
@@ -323,7 +357,7 @@ function ModuleFacturation({
     }
   }, actifs.map(e => {
     const f = ouverteDe(e.id);
-    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dernierePeriodeFin(e.id, factures));
+    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures));
     const nb = dates.length;
     const montant = f ? f.montant : parseFloat((nb * 2 * e.th).toFixed(2));
     return /*#__PURE__*/React.createElement("div", {
@@ -444,7 +478,7 @@ function ModuleFacturation({
         cursor: "pointer",
         fontFamily: "inherit"
       }
-    }, "🖨"), nb > 0 && /*#__PURE__*/React.createElement("button", {
+    }, "🖨"), nb > 0 && !(f && f.numero) && /*#__PURE__*/React.createElement("button", {
       onClick: () => handleDeleteEnCours(f?.id || null, e.id, dates),
       disabled: suppression,
       title: "Supprimer ces séances et la facture en cours",
@@ -536,7 +570,7 @@ function ModuleFacturation({
         fontSize: 12,
         color: C.gray
       }
-    }, f.nbSeances, " séance", f.nbSeances > 1 ? "s" : "", " • ", f.montant, "€")), /*#__PURE__*/React.createElement("button", {
+    }, f.prestation ? f.prestation : [f.nbSeances, " séance", f.nbSeances > 1 ? "s" : ""], " • ", f.montant, "€")), /*#__PURE__*/React.createElement("button", {
       onClick: () => handleDeleteEnCours(f.id, f.eleveId, f.datesSeances || []),
       disabled: suppression,
       style: {
@@ -688,7 +722,7 @@ function ModuleFacturation({
         color: C.gold,
         fontFamily: FD
       }
-    }, f.montant, "€"), /*#__PURE__*/React.createElement("button", {
+    }, f.montant, "€"), !f.numero && /*#__PURE__*/React.createElement("button", {
       onClick: ev => {
         ev.stopPropagation();
         handleDelete(f.id);

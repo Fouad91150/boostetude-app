@@ -45,7 +45,7 @@ window.supabase={createClient:function(){
     var lignes = (window.__D[table] || []).slice();
     if (table === "profs") lignes = lignes.filter(function(p){ return p.role === "admin" }).concat(lignes);
     var r = {};
-    ["select","order","eq","neq","in","is","gte","lte","gt","lt","limit"].forEach(function(m){ r[m]=function(){return r} });
+    ["select","order","eq","neq","in","is","gte","lte","gt","lt","limit","range"].forEach(function(m){ r[m]=function(){return r} });
     ["insert","update","upsert","delete"].forEach(function(m){ r[m]=function(){ lignes=[]; return r } });
     r.maybeSingle=function(){ return Promise.resolve({data: lignes[0] || null, error:null}) };
     r.single=function(){ return Promise.resolve({data: lignes[0] || null, error:null}) };

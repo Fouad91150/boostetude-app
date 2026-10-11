@@ -17,7 +17,7 @@ const reponseVide = { data: [], error: null };
 const requete = () => {
   const r = {
     select: () => r, order: () => r, eq: () => r, neq: () => r, in: () => r,
-    gte: () => r, lte: () => r, gt: () => r, lt: () => r,
+    gte: () => r, lte: () => r, range: () => r, limit: () => r, is: () => r, gt: () => r, lt: () => r,
     maybeSingle: () => ({ data: null, error: null }), single: () => ({ data: null, error: null }),
     insert: () => r, update: () => r, upsert: () => r, delete: () => r,
     then: (f) => Promise.resolve(reponseVide).then(f)
@@ -60,6 +60,7 @@ export function chargerApp() {
     return { VueImpression, ModuleReglages, OngletEntreprise, OngletLivreRecettes, OngletDonnees,
              BlocConformite, champsManquants, versCSV, ModuleFacturation, ModuleAppel, App, api, C,
              ModuleSuivi, CarteSuiviEleve,
+             toutLire, dejaFacturees, brouillonsEnRetard, lignesFacture, lignesRecettes, estFuture, jourDeLaDate,
              lundiDe, addJours, isoSemaine, libelleSemaine, telWhatsApp, splitNotions,
              estCompteRenduVide,
              phrase,
@@ -76,7 +77,10 @@ export function chargerApp() {
              ModuleStages, FormulaireStage, ChoixEleve, bilanStage, etatStage,
              periodeStage, FORFAITS_STAGE,
              OngletProfesseurs, seancesDuMois, duAuProf, makeRemunerationWhatsApp,
-             FenetreCompte, TAUX_HORAIRE_DEFAUT };
+             FenetreCompte, TAUX_HORAIRE_DEFAUT,
+             SEUIL_ALERTE_ABSENCES, debutAnneeScolaire, absencesNonJustifiees, alerteAbsences,
+             elevesEnAlerteAbsences, marquerPrevenu, makeAlerteAbsencesEmail, makeAlerteAbsencesSMS,
+             makeAlerteAbsencesWhatsApp, CarteAlerteAbsences, BlocAlertesAbsences, ModuleDashboard };
   `)(React, fenetre, doc, { clipboard: null, onLine: true },
      { createObjectURL: () => "blob:x", revokeObjectURL() {} },
      function Blob() {},

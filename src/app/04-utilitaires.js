@@ -38,15 +38,17 @@ const phrase = t => {
 
 // ── Semaines ─────────────────────────────────────────────────
 // Le bilan aux parents se raisonne par semaine du lundi au dimanche.
+// Calcul au calendrier local : en France (UTC+1/+2), toISOString() reculait
+// chaque date d'un jour et faisait commencer les semaines le dimanche.
 const lundiDe = d => {
   const x = new Date(d + "T00:00:00");
   x.setDate(x.getDate() - (x.getDay() + 6) % 7);
-  return x.toISOString().split("T")[0];
+  return isoLocal(x);
 };
 const addJours = (d, n) => {
   const x = new Date(d + "T00:00:00");
   x.setDate(x.getDate() + n);
-  return x.toISOString().split("T")[0];
+  return isoLocal(x);
 };
 // Numéro de semaine ISO ("2026-W40") : identifiant du bilan, pour ne pas
 // envoyer deux fois le même à un parent.
@@ -63,6 +65,12 @@ const libelleSemaine = lundi => {
     ? `${a.getDate()} – ${b.getDate()} ${MOIS_L[b.getMonth()].toLowerCase()}`
     : `${a.getDate()} ${MOIS_L[a.getMonth()].toLowerCase()} – ${b.getDate()} ${MOIS_L[b.getMonth()].toLowerCase()}`;
 };
+// Jour de la semaine d'une date, au format des groupes ("Mercredi").
+const jourDeLaDate = d => JOURS[(new Date(d + "T00:00:00").getDay() + 6) % 7];
+// Une séance ne peut pas avoir eu lieu dans le futur. Le 11/10, un appel daté
+// du 30/10 (un vendredi, pour un groupe du mercredi) avait compté cinq
+// absences fantômes et déclenché une alerte aux parents.
+const estFuture = d => !!d && d > todayStr();
 const fmtJourCourt = d => new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
 
 // Découpe un champ libre ("Thalès, calcul littéral") en notions distinctes,

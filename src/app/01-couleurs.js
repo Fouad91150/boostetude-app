@@ -77,7 +77,10 @@ const nowYM = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
-const todayStr = () => new Date().toISOString().split("T")[0];
+// Date du jour au calendrier LOCAL (Paris), jamais via toISOString() :
+// celle-ci passe en UTC et, entre minuit et 2 h, rendait la date de la veille.
+const isoLocal = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayStr = () => isoLocal(new Date());
 const lastMonths = n => {
   const r = [],
     d = new Date();

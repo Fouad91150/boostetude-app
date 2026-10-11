@@ -168,8 +168,8 @@ function VueImpression({
                   h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, euros(facture.montant)),
                   h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(facture.montant)))
             : matieresGroupees.length > 0
-              ? matieresGroupees.map((g, i) => {
-                  const total = parseFloat((g.dates.length * 2 * eleve.th).toFixed(2));
+              ? lignesFacture(matieresGroupees, facture.montant, eleve.th).map((g, i) => {
+                  const total = g.total;
                   return h("tr", { key: g.matiere, style: { borderBottom: i < matieresGroupees.length - 1 ? "1px solid #eee" : "none" } },
                     h("td", { style: { padding: "12px" } },
                       h("div", { style: { fontWeight: 600, color: "#222" } }, `${g.matiere || "Cours"} — ${eleve.niveau}`),
@@ -178,16 +178,22 @@ function VueImpression({
                       h("div", { style: { fontSize: 11, color: "#999", marginTop: 4, lineHeight: 1.6 } },
                         g.dates.map(d => fmtDateCourt(d)).join(" · "))),
                     h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${g.dates.length * 2} h`),
-                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(eleve.th)}/h`),
+                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(g.th)}/h`),
                     h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(total)));
                 })
               : h("tr", null, h("td", { colSpan: 4, style: { padding: "12px", color: "#888", textAlign: "center" } }, "Aucune séance"))
           )
         ),
 
+        // Les versements déjà reçus se déduisent ici comme sur le PDF : les deux
+        // documents d'une même facture ne doivent jamais annoncer deux sommes.
+        (Number(facture.encaisse) || 0) > 0 && h("div", { style: { fontSize: 13, color: "#555", textAlign: "right", marginBottom: 6, lineHeight: 1.7 } },
+          h("div", null, "Total ", h("b", null, euros(facture.montant))),
+          h("div", { style: { color: "#2e7d4f" } }, "Déjà réglé − ", euros(Number(facture.encaisse) || 0))),
         h("div", { style: { background: C.navy, borderRadius: 10, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
-          h("span", { style: { color: "#fff", fontSize: 14, fontWeight: 700 } }, "NET À PAYER"),
-          h("span", { style: { color: C.goldVif, fontSize: 28, fontWeight: 700, fontFamily: FD } }, euros(facture.montant))
+          h("span", { style: { color: "#fff", fontSize: 14, fontWeight: 700 } }, (Number(facture.encaisse) || 0) > 0 ? "RESTE À PAYER" : "NET À PAYER"),
+          h("span", { style: { color: C.goldVif, fontSize: 28, fontWeight: 700, fontFamily: FD } },
+            euros(Math.max(0, Math.round(((Number(facture.montant) || 0) - (Number(facture.encaisse) || 0)) * 100) / 100)))
         ),
         // Mention obligatoire en franchise de TVA : sans elle, la facture est irrégulière.
         h("div", { style: { fontSize: 11, color: "#666", textAlign: "right", marginBottom: 18, fontStyle: "italic" } },

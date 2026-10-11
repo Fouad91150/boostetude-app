@@ -72,8 +72,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.2.1";
-window.__APP_BUILD = "2026-10-08";
+<script>window.__APP_VERSION = "3.4.0";
+window.__APP_BUILD = "2026-10-11";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -157,7 +157,10 @@ const nowYM = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
-const todayStr = () => new Date().toISOString().split("T")[0];
+// Date du jour au calendrier LOCAL (Paris), jamais via toISOString() :
+// celle-ci passe en UTC et, entre minuit et 2 h, rendait la date de la veille.
+const isoLocal = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayStr = () => isoLocal(new Date());
 const lastMonths = n => {
   const r = [],
     d = new Date();
@@ -247,12 +250,26 @@ const appliquerRemiseMulti = (eleves, groupes, remise) => {
 const depuisUnAn = () => {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
+};
+// Supabase plafonne chaque réponse à 1 000 lignes. Les présences dépassent ce
+// seuil en quelques mois : tronquées sans prévenir, elles faisaient recalculer
+// des brouillons de facture à la baisse. On lit donc par pages, dans un ordre
+// stable, jusqu'à la dernière.
+const PAGE_LIGNES = 1000;
+const toutLire = async construire => {
+  let tout = [];
+  for (let de = 0; ; de += PAGE_LIGNES) {
+    const { data, error } = await construire().order("id").range(de, de + PAGE_LIGNES - 1);
+    if (error) return { data: null, error };
+    tout = tout.concat(data || []);
+    if (!data || data.length < PAGE_LIGNES) return { data: tout, error: null };
+  }
 };
 const api = {
   async fetchAll(isAdmin) {
     const borne = depuisUnAn();
-    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), sb.from("cours").select("*").gte("date", borne), sb.from("presences").select("*").gte("date", borne), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
+    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), toutLire(() => sb.from("cours").select("*").gte("date", borne)), toutLire(() => sb.from("presences").select("*").gte("date", borne)), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
     for (const r of [el, gr, co, pr, eg]) if (r.error) throw r.error;
     let elList = (el.data || []).map(normalizeEleveDB);
     const egList = eg.data || [];
@@ -286,7 +303,7 @@ const api = {
       const {
         data: paData,
         error: paErr
-      } = await sb.from("paiements").select("*");
+      } = await toutLire(() => sb.from("paiements").select("*"));
       if (paErr) throw paErr;
       factures = (paData || []).map(p => ({
         id: p.id,
@@ -502,10 +519,16 @@ const api = {
     const {
       data: existing,
       error: e1
-    } = await sb.from("paiements").select("id,statut").eq("eleve_id", eleveId).is("numero", null).is("stage_id", null).neq("statut", "paye").maybeSingle();
+    } = await sb.from("paiements").select("id,statut,montant_encaisse").eq("eleve_id", eleveId).is("numero", null).is("stage_id", null).neq("statut", "paye").maybeSingle();
     if (e1) throw e1;
     if (existing) {
-      if (dates.length === 0) {
+      // Un brouillon qui a déjà reçu de l'argent ne disparaît pas : ses
+      // versements sont au livre des recettes. Il passe à zéro séance, et
+      // l'écran montre alors une somme à rendre ou à reporter.
+      if (dates.length === 0 && Number(existing.montant_encaisse) > 0) {
+        const { error } = await sb.from("paiements").update({ nb_seances: 0, montant: 0, dates_seances: [] }).eq("id", existing.id);
+        if (error) throw error;
+      } else if (dates.length === 0) {
         const {
           error
         } = await sb.from("paiements").delete().eq("id", existing.id);
@@ -603,7 +626,8 @@ Object.assign(api, {
 // ─── API SUIVI DE SÉANCE & BILANS ────────────────────────────
 Object.assign(api, {
   async fetchComptesRendus() {
-    const { data, error } = await sb.from("comptes_rendus").select("*").gte("date", depuisUnAn()).order("date", { ascending: false });
+    const { data, error } = await toutLire(() => sb.from("comptes_rendus").select("*").gte("date", depuisUnAn()));
+    (data || []).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     if (error) throw error;
     return data || [];
   },
@@ -651,7 +675,8 @@ Object.assign(api, {
 // recalcule seule le solde de la facture et son statut (déclencheur).
 Object.assign(api, {
   async fetchEncaissements() {
-    const { data, error } = await sb.from("encaissements").select("*").order("date", { ascending: false });
+    const { data, error } = await toutLire(() => sb.from("encaissements").select("*"));
+    (data || []).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     if (error) throw error;
     return (data || []).map(e => ({
       id: e.id,
@@ -845,15 +870,17 @@ const phrase = t => {
 
 // ── Semaines ─────────────────────────────────────────────────
 // Le bilan aux parents se raisonne par semaine du lundi au dimanche.
+// Calcul au calendrier local : en France (UTC+1/+2), toISOString() reculait
+// chaque date d'un jour et faisait commencer les semaines le dimanche.
 const lundiDe = d => {
   const x = new Date(d + "T00:00:00");
   x.setDate(x.getDate() - (x.getDay() + 6) % 7);
-  return x.toISOString().split("T")[0];
+  return isoLocal(x);
 };
 const addJours = (d, n) => {
   const x = new Date(d + "T00:00:00");
   x.setDate(x.getDate() + n);
-  return x.toISOString().split("T")[0];
+  return isoLocal(x);
 };
 // Numéro de semaine ISO ("2026-W40") : identifiant du bilan, pour ne pas
 // envoyer deux fois le même à un parent.
@@ -870,6 +897,12 @@ const libelleSemaine = lundi => {
     ? `${a.getDate()} – ${b.getDate()} ${MOIS_L[b.getMonth()].toLowerCase()}`
     : `${a.getDate()} ${MOIS_L[a.getMonth()].toLowerCase()} – ${b.getDate()} ${MOIS_L[b.getMonth()].toLowerCase()}`;
 };
+// Jour de la semaine d'une date, au format des groupes ("Mercredi").
+const jourDeLaDate = d => JOURS[(new Date(d + "T00:00:00").getDay() + 6) % 7];
+// Une séance ne peut pas avoir eu lieu dans le futur. Le 11/10, un appel daté
+// du 30/10 (un vendredi, pour un groupe du mercredi) avait compté cinq
+// absences fantômes et déclenché une alerte aux parents.
+const estFuture = d => !!d && d > todayStr();
 const fmtJourCourt = d => new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
 
 // Découpe un champ libre ("Thalès, calcul littéral") en notions distinctes,
@@ -1041,25 +1074,64 @@ const dernierePeriodeFin = (eid, factures) => {
   return fin;
 };
 
+// Les séances déjà portées par une facture figée, une à une (date + matière).
+// Couper à « la dernière date facturée » perdait des séances pour de bon : la
+// physique d'un jour où seuls les maths figuraient sur la facture, ou un appel
+// saisi en retard pour une date antérieure. Une facture ancienne sans détail des
+// séances garde l'ancienne règle, par sa date de fin (`avant`).
+//
+// Depuis 3.4.0 chaque séance facturée porte aussi son groupe (`groupeId`) : la
+// clé date + groupe survit au renommage d'une matière. Les séances plus
+// anciennes (date + matière seulement) restent reconnues ; et si leur matière
+// n'existe plus chez l'élève — matière renommée — la date suffit.
+const dejaFacturees = (eid, factures) => {
+  const cles = new Set();
+  const anciennes = new Map(); // date → matières inscrites sans groupe
+  let avant = null;
+  (factures || []).filter(f =>
+    f.eleveId === eid && !f.stageId && f.statut !== "annulee" && (f.statut === "paye" || f.numero))
+    .forEach(f => {
+      const dates = f.datesSeances || [];
+      if (dates.length) dates.forEach(d => {
+        if (d.groupeId) cles.add(`${d.date}|g:${d.groupeId}`);
+        else {
+          cles.add(`${d.date}|${d.matiere || ""}`);
+          if (!anciennes.has(d.date)) anciennes.set(d.date, new Set());
+          anciennes.get(d.date).add(d.matiere || "");
+        }
+      });
+      else if (f.periodeFin && (!avant || f.periodeFin > avant)) avant = f.periodeFin;
+    });
+  return { cles, anciennes, avant };
+};
+
 // Ce qu'il reste à régler sur une facture, une fois les versements déduits.
 const resteDu = f => Math.max(0, Math.round(((f?.montant || 0) - (f?.encaisse || 0)) * 100) / 100);
 // Chaque séance renvoyée porte sa matière (un même élève peut suivre plusieurs
 // matières, ex. Maths + Physique) afin que la facture détaille quoi a été suivi.
+// Toute présence de l'élève compte, y compris dans un groupe qu'il a quitté
+// depuis : sinon un changement de groupe effaçait ses séances non facturées.
 const seancesOuvertes = (eid, appels, groupes, depuis) => {
-  const egs = groupes.filter(g => (g.eids || []).includes(eid));
-  return Object.entries(appels).filter(([k, p]) => {
-    const parts = k.split(":");
-    if (parts[0] !== "ap") return false;
-    if (!egs.find(g => g.id === parts[1])) return false;
-    if (depuis && parts[2] <= depuis) return false;
-    return p[eid] === "present";
+  const groupeDe = id => (groupes || []).find(g => g.id === id);
+  const matieresActuelles = new Set((groupes || []).filter(g => (g.eids || []).includes(eid)).map(g => g.matiere || ""));
+  const dejaVue = (date, g, gid) => {
+    if (!depuis) return false;
+    if (typeof depuis === "string") return date <= depuis;
+    if (depuis.avant && date <= depuis.avant) return true;
+    const matiere = g?.matiere || "";
+    if (depuis.cles.has(`${date}|g:${gid}`) || depuis.cles.has(`${date}|${matiere}`)) return true;
+    // Ancienne facture dont la matière a disparu des groupes de l'élève :
+    // la séance du même jour est réputée facturée (jamais deux fois).
+    const old = depuis.anciennes && depuis.anciennes.get(date);
+    return !!old && [...old].some(m => !matieresActuelles.has(m));
+  };
+  return Object.entries(appels || {}).filter(([k, p]) => {
+    const [tag, gid, date] = k.split(":");
+    if (tag !== "ap" || !p || p[eid] !== "present") return false;
+    return !dejaVue(date, groupeDe(gid), gid);
   }).map(([k]) => {
-    const parts = k.split(":");
-    const g = egs.find(x => x.id === parts[1]);
-    return {
-      date: parts[2],
-      matiere: g?.matiere || ""
-    };
+    const [, gid, date] = k.split(":");
+    return { date, matiere: groupeDe(gid)?.matiere || "", groupeId: gid };
   }).sort((a, b) => a.date.localeCompare(b.date));
 };
 // Regroupe une liste de séances {date,matiere} par matière, en conservant l'ordre
@@ -1080,6 +1152,45 @@ const horaireLabel = g => {
   if (g.jour && g.hd && g.hf) return `🕐 ${g.hd}–${g.hf} • ${g.jour}`;
   return "🕐 Horaire à définir";
 };
+
+// Lignes imprimées d'une facture, déduites de la facture elle-même.
+// Le tarif horaire se lit dans le MONTANT figé (montant ÷ heures), jamais dans la
+// fiche actuelle de l'élève : un élève passé de 3e en 2nde, ou une remise
+// ajoutée après coup, faisait imprimer « 120,00 € » au-dessus d'un « NET À PAYER
+// 100,00 € ». La dernière ligne absorbe l'arrondi pour que la somme tombe juste.
+const lignesFacture = (matieres, montant, thSecours) => {
+  const heures = (matieres || []).reduce((s, g) => s + g.dates.length * 2, 0);
+  const m = Number(montant) || 0;
+  const th = heures > 0 && m > 0 ? Math.round((m / heures) * 100) / 100 : (Number(thSecours) || 0);
+  let cumul = 0;
+  return (matieres || []).map((g, i, tout) => {
+    const h = g.dates.length * 2;
+    const total = i === tout.length - 1 && heures > 0 && m > 0
+      ? Math.round((m - cumul) * 100) / 100
+      : Math.round(h * th * 100) / 100;
+    cumul += total;
+    return { ...g, heures: h, th, total };
+  });
+};
+
+// Brouillons en retard sur l'appel. Seul l'administrateur peut écrire les
+// factures (sécurité de la base) : un appel enregistré par un collègue ne
+// recalculait donc rien, et ses élèves n'apparaissaient jamais « à envoyer ».
+// Au chargement, l'administrateur rattrape ce retard. Prudence voulue : on ne
+// fait qu'AJOUTER des séances manquantes, jamais en retirer ni supprimer.
+const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
+  .filter(e => e.actif !== false)
+  .map(e => {
+    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures))
+      .filter(d => !estFuture(d.date));
+    const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
+    const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
+    return dates.length > actuel
+      ? { eid: e.id, dates, montant: parseFloat((dates.length * 2 * e.th).toFixed(2)) }
+      : null;
+  })
+  .filter(Boolean);
+
 // ─── MESSAGES ────────────────────────────────────────────────
 // `detail` : quand l'élève cumule plusieurs matières (ex. Maths + Physique) sur la même
 // facture, on précise la répartition séance par matière — sinon on garde le message simple.
@@ -1706,28 +1817,34 @@ function PanneauEnvoi({
 }) {
   // Pour une absence, l'aperçu s'ouvre par défaut : la formulation exacte doit être
   // visible avant l'envoi, pas seulement accessible via l'œil.
-  const [apercu, setApercu] = useState(type === "absence" ? "email" : null);
+  const [apercu, setApercu] = useState(type === "absence" || type === "alerte_absences" ? "email" : null);
   const [copie, setCopie] = useState(null);
   const [envoiPDF, setEnvoiPDF] = useState(false);
 
   const isF = type === "facture";
   const isA = type === "absence";
-  const accent = isF ? C.green : isA ? C.blue : C.orange;
-  const fondBase = isF ? C.greenPale : isA ? C.bluePale : C.orangePale;
-  const bordBase = isF ? C.greenBord : isA ? C.blueBord : C.orangeBord;
+  // Absences répétées : `dates` porte alors les dates d'absence, pas de séance.
+  const isAl = type === "alerte_absences";
+  const accent = isF ? C.green : isA ? C.blue : isAl ? C.red : C.orange;
+  const fondBase = isF ? C.greenPale : isA ? C.bluePale : isAl ? C.redPale : C.orangePale;
+  const bordBase = isF ? C.greenBord : isA ? C.blueBord : isAl ? C.redBord : C.orangeBord;
 
   // Forfait de stage : le message annonce la prestation, pas un décompte de séances.
   const forfait = (facture && facture.prestation) || null;
 
   const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil, forfait)
     : isA ? makeAbsenceEmail(eleve, mois, justifie)
+    : isAl ? makeAlerteAbsencesEmail(eleve, dates || [])
     : makeRappelEmail(eleve, mois, montant, dates);
   const smsText = isF ? makeFactureSMS(eleve, mois, nb, montant, seuil, forfait)
     : isA ? makeAbsenceSMS(eleve, mois, justifie)
+    : isAl ? makeAlerteAbsencesSMS(eleve, dates || [])
     : makeRappelSMS(eleve, mois, montant);
   // WhatsApp accepte un texte plus long et un balisage léger : on lui donne la
   // version soignée plutôt que le SMS tronqué.
-  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait) : smsText;
+  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait)
+    : isAl ? makeAlerteAbsencesWhatsApp(eleve, dates || [])
+    : smsText;
 
   const tel = (eleve.tel || "").replace(/\s/g, "");
   const hrefEmail = `mailto:${eleve.email}?subject=${encodeURIComponent(emailData.sujet)}&body=${encodeURIComponent(emailData.corps)}`;
@@ -1825,7 +1942,7 @@ function PanneauEnvoi({
       borderRadius: 12, padding: 12, marginTop: 8
     }
   },
-    h(Lbl, { text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : "📨 Rappel paiement" }),
+    h(Lbl, { text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : isAl ? "🚨 Alerter le parent" : "📨 Rappel paiement" }),
 
     // ── Le fichier : un geste à part, le seul qui emporte vraiment la facture ──
     pdfPossible && h("div", { style: { display: "flex", gap: 6, marginBottom: 10 } },
@@ -1874,6 +1991,145 @@ function PanneauEnvoi({
       pdfPossible
         ? "Le SMS ne peut pas porter de pièce jointe. Pour envoyer vraiment le PDF, utilisez « Partager la facture PDF » puis choisissez WhatsApp ou votre messagerie — le message part avec le fichier."
         : "Sur ordinateur, ces boutons n'ouvrent une application que si une messagerie par défaut est configurée. Sinon utilisez 📋 pour copier le message."));
+}
+// ─── ALERTE ABSENCES RÉPÉTÉES ────────────────────────────────
+// Une absence isolée se signale séance par séance (onglet Parents de l'appel).
+// Trois absences non justifiées, c'est autre chose : un décrochage qui commence,
+// et un parent qui ne le sait peut-être pas. L'application le repère et prépare
+// le message ; l'envoi, comme partout, reste un geste de Fouad.
+//
+// Règles retenues :
+//  · seules les absences NON justifiées comptent — un parent qui a prévenu n'a
+//    pas à recevoir d'alerte ;
+//  · le compte court sur l'année scolaire (1er septembre → 31 août) ;
+//  · l'alerte revient par paliers : 3e absence, puis 6e, 9e…
+//  · « Parent prévenu » est mémorisé sur l'appareil, par élève et par palier.
+const SEUIL_ALERTE_ABSENCES = 3;
+
+const debutAnneeScolaire = d => {
+  const [y, m] = (d || todayStr()).split("-").map(Number);
+  return `${m >= 9 ? y : y - 1}-09-01`;
+};
+const finAnneeScolaire = d => `${Number(debutAnneeScolaire(d).slice(0, 4)) + 1}-08-31`;
+
+// Dates des absences non justifiées de l'élève sur l'année scolaire de `ref`,
+// tous groupes confondus (un élève inscrit en maths et en physique peut manquer
+// deux séances le même jour : ce sont bien deux absences).
+// Rien au-delà de la date de référence : une séance à venir n'a pas eu lieu.
+const absencesNonJustifiees = (eid, appels, ref) => {
+  const debut = debutAnneeScolaire(ref), fin = finAnneeScolaire(ref);
+  return Object.entries(appels || {}).filter(([k, p]) => {
+    const [t, , d] = k.split(":");
+    return t === "ap" && d >= debut && d <= fin && d <= (ref || todayStr()) && p && p[eid] === "absent_nj";
+  }).map(([k]) => k.split(":")[2]).sort();
+};
+
+const paliersAbsences = (n, seuil = SEUIL_ALERTE_ABSENCES) => Math.floor(n / seuil);
+const cleAlerteAbsences = (eid, ref) => `bo:alerte-abs:${eid}:${debutAnneeScolaire(ref)}`;
+const palierPrevenu = (eid, ref) => Number(Local.lire(cleAlerteAbsences(eid, ref), 0)) || 0;
+const marquerPrevenu = (eid, ref, palier) => Local.ecrire(cleAlerteAbsences(eid, ref), palier);
+
+// L'élève a-t-il franchi un palier dont le parent n'a pas encore été prévenu ?
+const alerteAbsences = (eid, appels, ref, seuil = SEUIL_ALERTE_ABSENCES) => {
+  const dates = absencesNonJustifiees(eid, appels, ref);
+  const palier = paliersAbsences(dates.length, seuil);
+  if (palier < 1 || palierPrevenu(eid, ref) >= palier) return null;
+  return { dates, palier, nb: dates.length };
+};
+
+const elevesEnAlerteAbsences = (eleves, appels, ref, seuil = SEUIL_ALERTE_ABSENCES) =>
+  (eleves || []).map(e => {
+    const a = alerteAbsences(e.id, appels, ref, seuil);
+    return a ? { eleve: e, ...a } : null;
+  }).filter(Boolean).sort((a, b) => b.nb - a.nb);
+
+// ── Messages ────────────────────────────────────────────────
+// Le ton : inquiet pour l'élève, pas accusateur envers le parent. On donne les
+// dates — un parent qui croyait son enfant en cours doit pouvoir vérifier — et
+// on ouvre la porte à une discussion plutôt qu'on ne réclame un justificatif.
+const listeDatesAbsences = (dates, puce) => dates.map(d => `${puce} ${fmtDateLongue(d)}`).join("\n");
+
+const makeAlerteAbsencesEmail = (e, dates) => ({
+  sujet: `Absences répétées de ${e.prenom} ${e.nom} — Boost'Étude`,
+  corps: `Bonjour ${e.parent || ""},\n\n`.replace(" ,", ",") +
+         `${e.prenom} a manqué ${dates.length} séances sans justificatif depuis la rentrée :\n` +
+         `${listeDatesAbsences(dates, "-")}\n\n` +
+         `En petit groupe, la régularité fait l'essentiel des progrès, et chaque séance manquée se rattrape difficilement. ` +
+         `Pourriez-vous nous dire ce qui empêche ${e.prenom} de venir ? Nous sommes disponibles pour en parler et trouver ensemble une solution.\n\n` +
+         `Cordialement,\n${signatureBoost}\nboostetude@gmail.com`
+});
+
+const makeAlerteAbsencesSMS = (e, dates) =>
+  `Boost'Étude : bonjour, ${e.prenom} a manqué ${dates.length} séances sans justificatif depuis la rentrée ` +
+  `(${dates.slice(-3).map(fmtDateCourt).join(", ")}). Pouvez-vous nous rappeler pour en parler ? Merci.`;
+
+const makeAlerteAbsencesWhatsApp = (e, dates) =>
+  `*Boost'Étude — Absences de ${e.prenom}*\n\n` +
+  `Bonjour ${e.parent || ""},\n\n`.replace(" ,", ",") +
+  `${e.prenom} a manqué *${dates.length} séances sans justificatif* depuis la rentrée :\n` +
+  `${listeDatesAbsences(dates, "•")}\n\n` +
+  `La régularité fait l'essentiel des progrès en petit groupe. Pourriez-vous nous dire ce qui empêche ${e.prenom} de venir ? ` +
+  `Nous sommes disponibles pour en parler.\n\n` +
+  `${signatureBoost}`;
+
+// ── Carte d'alerte ──────────────────────────────────────────
+function CarteAlerteAbsences({ eleve, dates, palier, refDate }) {
+  const [prevenu, setPrevenu] = useState(false);
+  const ref = refDate || todayStr();
+
+  if (prevenu) return h("div", {
+    style: {
+      background: C.greenPale, border: `1px solid ${C.greenBord}`, borderRadius: 12,
+      padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, fontSize: 13
+    }
+  },
+    h("span", null, "✅"),
+    h("div", { style: { flex: 1, color: C.texte } }, "Parent de ", h("b", null, eleve.prenom), " prévenu des absences répétées."),
+    h("button", {
+      onClick: () => { marquerPrevenu(eleve.id, ref, palier - 1); setPrevenu(false); },
+      style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit" }
+    }, "Annuler"));
+
+  return h("div", {
+    style: { background: C.surface, border: `2px solid ${C.red}`, borderRadius: 14, padding: 14 }
+  },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+      h(Avatar, { p: eleve.prenom, n: eleve.nom }),
+      h("div", { style: { flex: 1, minWidth: 0 } },
+        h("div", { style: { fontSize: 15, fontWeight: 800, color: C.texte, fontFamily: FD } }, eleve.prenom, " ", eleve.nom),
+        h("div", { style: { fontSize: 12, color: C.gray } }, eleve.parent || "Parent", eleve.tel ? ` • 📱 ${eleve.tel}` : "")),
+      h("span", {
+        style: { fontSize: 11, fontWeight: 800, color: "#fff", background: C.red, padding: "4px 9px", borderRadius: 20, whiteSpace: "nowrap" }
+      }, `🚨 ${dates.length} absences`)),
+    h("div", { style: { fontSize: 12.5, color: C.red, fontWeight: 700, margin: "10px 0 6px" } },
+      `${dates.length} absences non justifiées depuis la rentrée`),
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 } },
+      dates.map((d, i) => h("span", {
+        key: d + i,
+        style: { fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 20, background: C.redPale, color: C.red, border: `1px solid ${C.redBord}` }
+      }, fmtDateCourt(d)))),
+    h(PanneauEnvoi, { eleve, mois: "", type: "alerte_absences", dates }),
+    h("button", {
+      onClick: () => { marquerPrevenu(eleve.id, ref, palier); setPrevenu(true); },
+      style: {
+        width: "100%", marginTop: 10, background: C.navy, border: "none", borderRadius: 10,
+        padding: 11, color: "#fff", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit"
+      }
+    }, "✓ Parent prévenu"));
+}
+
+// Bloc de l'accueil : tous les élèves à alerter, ou rien du tout.
+function BlocAlertesAbsences({ eleves, appels }) {
+  const ref = todayStr();
+  const liste = elevesEnAlerteAbsences(eleves, appels, ref);
+  if (!liste.length) return null;
+  return h("div", { style: { marginBottom: 16 } },
+    h("div", { style: { fontSize: 13, fontWeight: 800, color: C.red, marginBottom: 4 } },
+      `🚨 Absences répétées — ${liste.length} parent${liste.length > 1 ? "s" : ""} à prévenir`),
+    h("div", { style: { fontSize: 11.5, color: C.gray, marginBottom: 10, lineHeight: 1.5 } },
+      `Alerte à chaque palier de ${SEUIL_ALERTE_ABSENCES} absences non justifiées depuis la rentrée.`),
+    h("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+      liste.map(a => h(CarteAlerteAbsences, { key: a.eleve.id, eleve: a.eleve, dates: a.dates, palier: a.palier, refDate: ref }))));
 }
 // ─── FORMULAIRE GROUPE ────────────────────────────────────────
 function FormulaireGroupe({
@@ -2063,8 +2319,8 @@ function FormulaireEleve({
     try {
       await onSave({
         id: initial?.id,
-        prenom,
-        nom,
+        prenom: prenom.trim(),
+        nom: nom.trim(),
         niveau,
         mp,
         email,
@@ -2781,6 +3037,10 @@ function ModuleAppel({
     return { pres: p, repris: false };
   };
   const ouvrir = g => {
+    if (estFuture(date)) {
+      signalerErreur(`Le ${fmtDateLongue(date)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
+      return;
+    }
     setGrp(g);
     const { pres: p, repris } = etatPour(g, date);
     setPres(p);
@@ -2810,9 +3070,29 @@ function ModuleAppel({
   const nbP = Object.values(pres).filter(s => s === "present").length;
   const nbAJ = Object.values(pres).filter(s => s === "absent_j").length;
   const nbAN = Object.values(pres).filter(s => s === "absent_nj").length;
+  // Absences répétées : on compte avec l'appel en cours de saisie, pour que
+  // l'alerte tombe dès la séance qui fait franchir le palier.
+  const alertesAbs = grp ? (() => {
+    const avecCetAppel = { ...appels, [`ap:${grp.id}:${date}`]: pres };
+    return (grp.eids || []).map(eid => {
+      const e = elevesMap[eid];
+      const a = e && pres[eid] === "absent_nj" ? alerteAbsences(eid, avecCetAppel, date) : null;
+      return a ? { eleve: e, ...a } : null;
+    }).filter(Boolean);
+  })() : [];
+  const idsAlerte = alertesAbs.map(a => a.eleve.id);
   // Un groupe sans inscrit est une place tenue pour plus tard, pas une séance à
   // pointer. Il quitte la liste principale sans disparaître de l'application.
-  const groupesTenus = groupes.filter(g => (g.eids || []).length > 0);
+  // Les groupes qui ont cours ce jour-là passent en tête : le bon groupe est
+  // sous le pouce, et un groupe pointé un autre jour que le sien se remarque.
+  const jourChoisi = jourDeLaDate(date);
+  const horsJour = g => !!g.jour && g.jour !== jourChoisi;
+  const groupesTenus = groupes.filter(g => (g.eids || []).length > 0)
+    .sort((a, b) => (horsJour(a) ? 1 : 0) - (horsJour(b) ? 1 : 0));
+  // Si aucun groupe n'a cours ce jour-là, une seule ligne le dit (plutôt qu'un
+  // avertissement sur chaque carte).
+  const avecJour = groupesTenus.filter(g => g.jour);
+  const aucunCeJour = avecJour.length > 0 && avecJour.every(horsJour);
   const groupesVides = groupes.filter(g => (g.eids || []).length === 0);
   if (etape === "groupes") return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2827,6 +3107,7 @@ function ModuleAppel({
   }), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: date,
+    max: todayStr(),
     onChange: e => setDate(e.target.value),
     style: {
       width: "100%",
@@ -2851,7 +3132,17 @@ function ModuleAppel({
     weekday: "long",
     day: "numeric",
     month: "long"
-  }))), /*#__PURE__*/React.createElement("div", {
+  })), !estFuture(date) && aucunCeJour && h("div", {
+    style: { marginTop: 8, fontSize: 13, color: C.orange, fontWeight: 600 }
+  }, `Aucun groupe n'a cours le ${jourChoisi.toLowerCase()} — vérifiez la date avant de faire l'appel.`), estFuture(date) && h("div", {
+    style: { marginTop: 10, padding: "10px 12px", borderRadius: 10, background: C.redPale,
+      border: `1px solid ${C.redBord}`, color: C.red, fontSize: 13, fontWeight: 600 }
+  }, "⚠️ Cette date est à venir. L'appel se fait le jour de la séance. ",
+    h("button", {
+      onClick: () => setDate(todayStr()),
+      style: { background: "none", border: "none", padding: 0, color: C.red, fontWeight: 800,
+        textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }
+    }, "Revenir à aujourd'hui"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
@@ -2924,7 +3215,10 @@ function ModuleAppel({
         fontSize: 12,
         color: C.gray
       }
-    }, horaireLabel(g), " • ", (g.eids || []).length, "/", g.max, " élèves")), fait ? /*#__PURE__*/React.createElement("span", {
+    }, horaireLabel(g), " • ", (g.eids || []).length, "/", g.max, " élèves"),
+      horsJour(g) && !fait && !aucunCeJour && h("div", {
+        style: { fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 4 }
+      }, `Cours habituel le ${g.jour.toLowerCase()} — vérifiez la date`)), fait ? /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
         fontWeight: 700,
@@ -3073,6 +3367,23 @@ function ModuleAppel({
           style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap" }
         }, "✏️ Corriger")),
 
+      // Un élève vient d'atteindre 3, 6, 9… absences non justifiées : on le dit
+      // tout de suite, c'est le moment où le prof a le téléphone en main.
+      alertesAbs.length > 0 && h("div", {
+        style: {
+          background: C.redPale, border: `1px solid ${C.redBord}`, borderRadius: 12,
+          padding: "12px 14px", marginBottom: 18, display: "flex", alignItems: "center", gap: 10
+        }
+      },
+        h("span", { style: { fontSize: 20 } }, "🚨"),
+        h("div", { style: { flex: 1, fontSize: 13, color: C.texte, lineHeight: 1.45 } },
+          alertesAbs.map((a, i) => h("div", { key: a.eleve.id },
+            h("b", null, a.eleve.prenom, " ", a.eleve.nom), ` : ${a.nb} absences non justifiées depuis la rentrée`))),
+        h("button", {
+          onClick: () => { setEtape("appel"); setOnglet("parents"); },
+          style: { background: C.red, border: "none", borderRadius: 10, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit", padding: "8px 10px", whiteSpace: "nowrap" }
+        }, "Prévenir →")),
+
       presentsIds.length === 0
         ? h("div", { style: { textAlign: "center", padding: "20px 0 28px", color: C.gray, fontSize: 13 } },
             "Personne n'était présent : il n'y a pas de compte rendu à écrire.")
@@ -3161,7 +3472,7 @@ function ModuleAppel({
     l: "🕐 Historique"
   }, {
     k: "parents",
-    l: `✉️ Parents${absents.length > 0 ? ` (${absents.length})` : ""}`
+    l: `${alertesAbs.length > 0 ? "🚨" : "✉️"} Parents${absents.length > 0 ? ` (${absents.length})` : ""}`
   }].map(({
     k,
     l
@@ -3438,7 +3749,11 @@ function ModuleAppel({
         }
       }, st === "present" ? "✅" : st === "absent_j" ? "📋" : "❌", " ", e.prenom);
     })));
-  })), onglet === "parents" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  })), onglet === "parents" && /*#__PURE__*/React.createElement("div", null, alertesAbs.length > 0 && h("div", {
+    style: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }
+  }, h("div", { style: { fontSize: 13, fontWeight: 800, color: C.red } }, "🚨 Absences répétées"),
+    alertesAbs.map(a => h(CarteAlerteAbsences, { key: a.eleve.id, eleve: a.eleve, dates: a.dates, palier: a.palier, refDate: date }))),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: C.gray,
@@ -3462,7 +3777,7 @@ function ModuleAppel({
       gap: 12,
       paddingBottom: 20
     }
-  }, absents.map(eid => {
+  }, absents.filter(eid => !idsAlerte.includes(eid)).map(eid => {
     const e = elevesMap[eid];
     if (!e) return null;
     const st = pres[eid];
@@ -3982,17 +4297,17 @@ function construireFacturePDF(facture, eleve, parametres) {
     page.texte(M + 10, y + 6, "Aucune séance", { taille: 9.5, couleur: GRIS });
     y += 24;
   } else {
-    matieres.forEach((g, i) => {
-      const total = parseFloat((g.dates.length * 2 * eleve.th).toFixed(2));
+    lignesFacture(matieres, facture.montant, eleve.th).forEach((g, i) => {
+      const total = g.total;
       page.texte(M + 10, y + 4, `${g.matiere || "Cours"} — ${eleve.niveau}`, { taille: 10, gras: true, couleur: NOIR });
       page.texte(M + 10, y + 16,
         `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
-        (eleve.remise > 0 ? ` · remise de ${euros(eleve.remise)}/h (inscriptions multiples)` : ""),
+        (eleve.remise > 0 && Math.abs(g.th - eleve.th) < 0.005 ? ` · remise de ${euros(eleve.remise)}/h (inscriptions multiples)` : ""),
         { taille: 8, couleur: GRIS });
       const finDates = page.paragraphe(M + 10, y + 27, g.dates.map(d => fmtDateCourt(d)).join(" · "),
         COL_QTE - M - 30, { taille: 8, couleur: GRIS_PALE, interligne: 1.3 });
       page.texte(COL_QTE, y + 4, `${g.dates.length * 2} h`, { taille: 9.5, couleur: GRIS, align: "droite" });
-      page.texte(COL_TARIF, y + 4, `${euros(eleve.th)}/h`, { taille: 9.5, couleur: GRIS, align: "droite" });
+      page.texte(COL_TARIF, y + 4, `${euros(g.th)}/h`, { taille: 9.5, couleur: GRIS, align: "droite" });
       page.texte(DROITE - 10, y + 4, euros(total), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
       y = Math.max(finDates, y + 34) + 6;
       if (i < matieres.length - 1) {
@@ -4278,8 +4593,8 @@ function VueImpression({
                   h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, euros(facture.montant)),
                   h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(facture.montant)))
             : matieresGroupees.length > 0
-              ? matieresGroupees.map((g, i) => {
-                  const total = parseFloat((g.dates.length * 2 * eleve.th).toFixed(2));
+              ? lignesFacture(matieresGroupees, facture.montant, eleve.th).map((g, i) => {
+                  const total = g.total;
                   return h("tr", { key: g.matiere, style: { borderBottom: i < matieresGroupees.length - 1 ? "1px solid #eee" : "none" } },
                     h("td", { style: { padding: "12px" } },
                       h("div", { style: { fontWeight: 600, color: "#222" } }, `${g.matiere || "Cours"} — ${eleve.niveau}`),
@@ -4288,16 +4603,22 @@ function VueImpression({
                       h("div", { style: { fontSize: 11, color: "#999", marginTop: 4, lineHeight: 1.6 } },
                         g.dates.map(d => fmtDateCourt(d)).join(" · "))),
                     h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${g.dates.length * 2} h`),
-                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(eleve.th)}/h`),
+                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(g.th)}/h`),
                     h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(total)));
                 })
               : h("tr", null, h("td", { colSpan: 4, style: { padding: "12px", color: "#888", textAlign: "center" } }, "Aucune séance"))
           )
         ),
 
+        // Les versements déjà reçus se déduisent ici comme sur le PDF : les deux
+        // documents d'une même facture ne doivent jamais annoncer deux sommes.
+        (Number(facture.encaisse) || 0) > 0 && h("div", { style: { fontSize: 13, color: "#555", textAlign: "right", marginBottom: 6, lineHeight: 1.7 } },
+          h("div", null, "Total ", h("b", null, euros(facture.montant))),
+          h("div", { style: { color: "#2e7d4f" } }, "Déjà réglé − ", euros(Number(facture.encaisse) || 0))),
         h("div", { style: { background: C.navy, borderRadius: 10, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
-          h("span", { style: { color: "#fff", fontSize: 14, fontWeight: 700 } }, "NET À PAYER"),
-          h("span", { style: { color: C.goldVif, fontSize: 28, fontWeight: 700, fontFamily: FD } }, euros(facture.montant))
+          h("span", { style: { color: "#fff", fontSize: 14, fontWeight: 700 } }, (Number(facture.encaisse) || 0) > 0 ? "RESTE À PAYER" : "NET À PAYER"),
+          h("span", { style: { color: C.goldVif, fontSize: 28, fontWeight: 700, fontFamily: FD } },
+            euros(Math.max(0, Math.round(((Number(facture.montant) || 0) - (Number(facture.encaisse) || 0)) * 100) / 100)))
         ),
         // Mention obligatoire en franchise de TVA : sans elle, la facture est irrégulière.
         h("div", { style: { fontSize: 11, color: "#666", textAlign: "right", marginBottom: 18, fontStyle: "italic" } },
@@ -4369,6 +4690,18 @@ function ModuleFacturation({
   // Renvoie true si la suppression a bien eu lieu (permet d'attendre la confirmation
   // avant de fermer une vue, ex. la fiche d'impression, sans la fermer si on annule).
   const handleDelete = async factureId => {
+    // Garde-fou : une facture numérotée ne disparaît jamais (trou dans la
+    // numérotation, versements effacés en cascade, présences supprimées).
+    const emise = factures.find(f => f.id === factureId && f.numero);
+    if (emise) {
+      signalerErreur(`La facture ${emise.numero} est émise : elle ne se supprime pas (son numéro doit rester dans la séquence). Utilisez « Annuler » dans Factures → Gérer.`);
+      return false;
+    }
+    const payee = factures.find(f => f.id === factureId && (Number(f.encaisse) > 0 || f.statut === "paye"));
+    if (payee) {
+      signalerErreur("Cette facture a reçu des versements : retirez-les d'abord (Encaisser → la croix). Ils figurent au livre des recettes.");
+      return false;
+    }
     if (!window.confirm("Supprimer définitivement cette facture ? Cette action est irréversible.")) return false;
     setSuppression(true);
     let ok = false;
@@ -4386,6 +4719,16 @@ function ModuleFacturation({
   // la ligne facture ne suffit pas, le même montant réapparaîtrait aussitôt. On retire donc
   // aussi les séances présentes sous-jacentes (utile pour nettoyer un test, par exemple).
   const handleDeleteEnCours = async (factureId, eleveId, dates) => {
+    const emise = factures.find(f => f.id === factureId && f.numero);
+    if (emise) {
+      signalerErreur(`La facture ${emise.numero} est émise : elle ne se supprime pas (son numéro doit rester dans la séquence). Utilisez « Annuler » dans Factures → Gérer.`);
+      return false;
+    }
+    const payee = factures.find(f => f.id === factureId && (Number(f.encaisse) > 0 || f.statut === "paye"));
+    if (payee) {
+      signalerErreur("Cette facture a reçu des versements : retirez-les d'abord (Encaisser → la croix). Ils figurent au livre des recettes.");
+      return false;
+    }
     if (!window.confirm("Supprimer ces séances de l'appel et la facture en cours associée ? Cette action retire ces séances de l'historique de présence et est irréversible.")) return false;
     setSuppression(true);
     let ok = false;
@@ -4450,22 +4793,34 @@ function ModuleFacturation({
   };
 
   const actifs = eleves.filter(e => e.actif !== false);
-  const ouvertes = factures.filter(f => f.statut !== "paye");
+  // Ouverte = ni soldée ni annulée. Une facture annulée n'est plus due.
+  const ouvertes = factures.filter(f => f.statut !== "paye" && f.statut !== "annulee");
   // Seuil de signalement, réglable dans Réglages (trois séances par défaut).
   const seuil = Math.max(1, parseInt(parametres?.seuil_facturation, 10) || SEUIL_FACTURATION_DEFAUT);
   // À facturer : la facture a atteint le seuil et n'a pas encore de numéro.
   const aFacturer = ouvertes
-    .filter(f => !f.numero && (f.nbSeances || 0) >= seuil && actifs.find(e => e.id === f.eleveId))
+    // Un forfait de stage se facture d'un bloc : il est à envoyer dès sa création.
+    .filter(f => !f.numero && (f.stageId || (f.nbSeances || 0) >= seuil) && actifs.find(e => e.id === f.eleveId))
     .sort((a, b) => (b.nbSeances || 0) - (a.nbSeances || 0));
   // Ce qui reste à encaisser sur des factures déjà parties chez les parents.
   const nbARelancer = aRelancer(factures, actifs).length;
-  const ouverteDe = eid => ouvertes.find(f => f.eleveId === eid);
+  // La carte d'un élève montre d'abord son brouillon de cours (celui que l'appel
+  // fait grossir) ; à défaut, la plus récente de ses factures restant dues. Avant,
+  // la première venue de la base gagnait : un stage pouvait masquer le brouillon.
+  const ouverteDe = eid => {
+    const siennes = ouvertes.filter(f => f.eleveId === eid);
+    return siennes.find(f => !f.numero && !f.stageId)
+      || siennes.sort((a, b) => (b.periodeFin || b.periodeDebut || "").localeCompare(a.periodeFin || a.periodeDebut || ""))[0];
+  };
   // Solde ouvert dont l'élève est désactivé ou n'existe plus : à traiter à part,
   // sinon il reste invisible et impossible à solder ou supprimer.
   const ouvertesOrphelines = ouvertes.filter(f => !actifs.find(e => e.id === f.eleveId));
-  const totalEnCours = ouvertes.reduce((s, f) => s + f.montant, 0);
+  // Ce qui reste réellement dû : versements déjà reçus déduits.
+  const totalEnCours = Math.round(ouvertes.reduce((s, f) => s + resteDu(f), 0) * 100) / 100;
   const payees = factures.filter(f => f.statut === "paye").sort((a, b) => (b.periodeFin || b.datePaiement || "").localeCompare(a.periodeFin || a.datePaiement || ""));
-  const caParMois = ym => payees.filter(f => (f.datePaiement || "").startsWith(ym)).reduce((s, f) => s + f.montant, 0);
+  // Encaissé = argent reçu dans le mois, versement par versement (acomptes compris).
+  const recettes = lignesRecettes(encaissements, factures);
+  const caParMois = ym => Math.round(recettes.filter(l => l.date.startsWith(ym)).reduce((s, l) => s + l.montant, 0) * 100) / 100;
   const histoCA = lastMonths(6).reverse().map(m => ({
     l: MOIS_C[+m.split("-")[1] - 1],
     v: caParMois(m)
@@ -4558,7 +4913,7 @@ function ModuleFacturation({
     h("div", { style: { fontSize: 15, fontWeight: 800, color: C.gold, fontFamily: FD, marginBottom: 3 } },
       `${aFacturer.length} facture${aFacturer.length > 1 ? "s" : ""} à envoyer`),
     h("div", { style: { fontSize: 12, color: C.gray, marginBottom: 10, lineHeight: 1.5 } },
-      `Ces élèves ont atteint ${seuil} séances. « Envoyer » émet la facture et ouvre le partage avec le PDF et le message — touchez le nom pour la relire avant.`),
+      `Ces élèves ont atteint ${seuil} séances (ou ont un stage à facturer). « Envoyer » émet la facture et ouvre le partage avec le PDF et le message — touchez le nom pour la relire avant.`),
     h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       aFacturer.map(f => {
         const el = eleveDe(f.eleveId);
@@ -4583,7 +4938,7 @@ function ModuleFacturation({
             h("div", { style: { fontSize: 13.5, fontWeight: 700, color: C.texte, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
               `${el.prenom} ${el.nom}`),
             h("div", { style: { fontSize: 11.5, color: C.gray, fontWeight: 600, marginTop: 1 } },
-              `${f.nbSeances} séance${f.nbSeances > 1 ? "s" : ""} • `,
+              f.prestation ? `${f.prestation} • ` : `${f.nbSeances} séance${f.nbSeances > 1 ? "s" : ""} • `,
               h("span", { style: { color: C.gold, fontWeight: 800 } }, `${f.montant} €`))),
           h("button", {
             onClick: () => emettreEtEnvoyer(f, el),
@@ -4654,7 +5009,7 @@ function ModuleFacturation({
     }
   }, actifs.map(e => {
     const f = ouverteDe(e.id);
-    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dernierePeriodeFin(e.id, factures));
+    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures));
     const nb = dates.length;
     const montant = f ? f.montant : parseFloat((nb * 2 * e.th).toFixed(2));
     return /*#__PURE__*/React.createElement("div", {
@@ -4775,7 +5130,7 @@ function ModuleFacturation({
         cursor: "pointer",
         fontFamily: "inherit"
       }
-    }, "🖨"), nb > 0 && /*#__PURE__*/React.createElement("button", {
+    }, "🖨"), nb > 0 && !(f && f.numero) && /*#__PURE__*/React.createElement("button", {
       onClick: () => handleDeleteEnCours(f?.id || null, e.id, dates),
       disabled: suppression,
       title: "Supprimer ces séances et la facture en cours",
@@ -4867,7 +5222,7 @@ function ModuleFacturation({
         fontSize: 12,
         color: C.gray
       }
-    }, f.nbSeances, " séance", f.nbSeances > 1 ? "s" : "", " • ", f.montant, "€")), /*#__PURE__*/React.createElement("button", {
+    }, f.prestation ? f.prestation : [f.nbSeances, " séance", f.nbSeances > 1 ? "s" : ""], " • ", f.montant, "€")), /*#__PURE__*/React.createElement("button", {
       onClick: () => handleDeleteEnCours(f.id, f.eleveId, f.datesSeances || []),
       disabled: suppression,
       style: {
@@ -5019,7 +5374,7 @@ function ModuleFacturation({
         color: C.gold,
         fontFamily: FD
       }
-    }, f.montant, "€"), /*#__PURE__*/React.createElement("button", {
+    }, f.montant, "€"), !f.numero && /*#__PURE__*/React.createElement("button", {
       onClick: ev => {
         ev.stopPropagation();
         handleDelete(f.id);
@@ -5189,9 +5544,14 @@ const JOURS_CHAUD = 15;
 
 const joursDepuis = iso => {
   if (!iso) return 0;
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d)) return 0;
-  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+  // Écart en jours de calendrier, compté en UTC pur : ni le fuseau ni le
+  // passage à l'heure d'été (journée de 23 h) ne peuvent décaler le compte.
+  const [a, m, j] = String(iso).slice(0, 10).split("-").map(Number);
+  const debut = Date.UTC(a, m - 1, j);
+  if (isNaN(debut)) return 0;
+  const n = new Date();
+  const auj = Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
+  return Math.max(0, Math.round((auj - debut) / 86400000));
 };
 
 const tonRelance = jours =>
@@ -5697,18 +6057,28 @@ function ModuleDashboard({
   eleves,
   groupes,
   appels,
-  factures
+  factures,
+  encaissements
 }) {
   const [mois, setMois] = useState(nowYM());
   const actifs = eleves.filter(e => e.actif !== false);
-  const caYM = ym => factures.filter(f => f.mois === ym).reduce((s, f) => s + f.montant, 0);
+  // Facturé : toutes les factures du mois sauf les annulées.
+  const valides = factures.filter(f => f.statut !== "annulee");
+  const arrondi = n => Math.round(n * 100) / 100;
+  const caYM = ym => arrondi(valides.filter(f => f.mois === ym).reduce((s, f) => s + f.montant, 0));
   const caMois = caYM(mois);
-  const caPaye = factures.filter(f => f.mois === mois && f.statut === "paye").reduce((s, f) => s + f.montant, 0);
-  const impayes = factures.filter(f => f.statut === "en_attente" || f.statut === "impaye");
+  // Encaissé : l'argent reçu dans le mois, versement par versement.
+  // Même source que le livre des recettes : les deux chiffres ne divergent jamais.
+  const caPaye = arrondi(lignesRecettes(encaissements, factures)
+    .filter(l => l.date.startsWith(mois)).reduce((s, l) => s + l.montant, 0));
+  // Impayé = facture ÉMISE dont il reste quelque chose à recevoir (acomptes
+  // déduits). Un brouillon pas encore envoyé n'est l'impayé de personne.
+  const impayes = valides.filter(f => f.numero && resteDu(f) > 0);
+  const totalImpaye = arrondi(impayes.reduce((s, f) => s + resteDu(f), 0));
   const absM = [];
   Object.entries(appels).forEach(([k, p]) => {
     const parts = k.split(":");
-    if (parts[0] !== "ap" || !parts[2]?.startsWith(mois)) return;
+    if (parts[0] !== "ap" || !parts[2]?.startsWith(mois) || estFuture(parts[2])) return;
     Object.entries(p).forEach(([eid, s]) => {
       if (s !== "present") {
         const e = eleves.find(x => x.id === eid);
@@ -5801,12 +6171,15 @@ function ModuleDashboard({
       fontWeight: 700,
       color: C.orange
     }
-  }, impayes.reduce((s, f) => s + f.montant, 0), "€ en attente"), /*#__PURE__*/React.createElement("div", {
+  }, montantTxt(totalImpaye), " à encaisser"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: C.gray
     }
-  }, impayes.length, " facture", impayes.length > 1 ? "s" : "", " impayée", impayes.length > 1 ? "s" : "")))), /*#__PURE__*/React.createElement("div", {
+  }, impayes.length, " facture", impayes.length > 1 ? "s" : "", " émise", impayes.length > 1 ? "s" : "", " pas encore réglée", impayes.length > 1 ? "s" : "")))), h(BlocAlertesAbsences, {
+    eleves: actifs,
+    appels
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr",
@@ -6201,27 +6574,49 @@ function OngletEntreprise({ parametres, onSave }) {
   );
 }
 
-function OngletLivreRecettes({ factures, eleves }) {
-  const annee = new Date().getFullYear();
-  const emises = factures.filter(f => f.numero).sort((a, b) => (a.numero || "").localeCompare(b.numero || ""));
-  const encaissees = emises.filter(f => f.statut === "paye" && f.datePaiement);
-  const total = encaissees.reduce((s, f) => s + Number(f.montant || 0), 0);
-  const nomDe = eid => {
-    const e = eleves.find(x => x.id === eid);
-    return e ? `${e.prenom} ${e.nom}` : "—";
+// Le livre des recettes d'un micro-entrepreneur enregistre l'ARGENT REÇU, à la
+// date où il est reçu — c'est aussi ce chiffre qui se déclare à l'URSSAF. Il se
+// construit donc versement par versement (table `encaissements`), et non à partir
+// des factures soldées : un acompte, une facture réglée en deux mois ou un
+// brouillon encaissé sans numéro en auraient disparu.
+const lignesRecettes = (encaissements, factures) => {
+  const factureDe = id => (factures || []).find(f => f.id === id);
+  const lignes = (encaissements || []).map(e => ({ id: e.id, date: e.date, montant: Number(e.montant) || 0, mode: e.mode, facture: factureDe(e.factureId) }));
+  // Factures soldées avant l'arrivée des versements (2.4.0) : une ligne chacune.
+  const avecVersement = new Set((encaissements || []).map(e => e.factureId));
+  (factures || []).filter(f => f.statut === "paye" && f.datePaiement && !avecVersement.has(f.id))
+    .forEach(f => lignes.push({ id: "f-" + f.id, date: f.datePaiement, montant: Number(f.montant) || 0, mode: f.mode, facture: f }));
+  return lignes.filter(l => l.date).sort((a, b) => a.date.localeCompare(b.date));
+};
+
+function OngletLivreRecettes({ factures, eleves, encaissements }) {
+  const toutes = lignesRecettes(encaissements, factures);
+  const annees = [...new Set([String(new Date().getFullYear()), ...toutes.map(l => l.date.slice(0, 4))])].sort().reverse();
+  const [annee, setAnnee] = useState(annees[0]);
+  const lignes = toutes.filter(l => l.date.startsWith(annee));
+  const total = lignes.reduce((s, l) => s + l.montant, 0);
+  const ceMois = toutes.filter(l => l.date.startsWith(nowYM())).reduce((s, l) => s + l.montant, 0);
+  const nomDe = f => {
+    const e = f && eleves.find(x => x.id === f.eleveId);
+    return e ? `${e.prenom} ${e.nom}`.trim() : "—";
   };
+  const nature = f => !f ? "Versement"
+    : f.prestation ? f.prestation
+    : `Cours de soutien scolaire — ${f.nbSeances || 0} séance(s)`;
+  const numero = f => !f ? "—" : f.numero || "brouillon";
+  const eur = n => n.toFixed(2).replace(".", ",") + " €";
 
   const exporter = () => {
     telechargerFichier(
       `livre-recettes-${annee}.csv`,
       versCSV([
-        { titre: "Date d'encaissement", valeur: f => f.datePaiement },
-        { titre: "N° de facture", valeur: f => f.numero },
-        { titre: "Client", valeur: f => nomDe(f.eleveId) },
-        { titre: "Nature", valeur: f => `Cours de soutien scolaire — ${f.nbSeances} séance(s)` },
-        { titre: "Montant (€)", valeur: f => String(f.montant).replace(".", ",") },
-        { titre: "Mode de règlement", valeur: f => f.mode }
-      ], encaissees),
+        { titre: "Date d'encaissement", valeur: l => l.date },
+        { titre: "N° de facture", valeur: l => numero(l.facture) },
+        { titre: "Client", valeur: l => nomDe(l.facture) },
+        { titre: "Nature", valeur: l => nature(l.facture) },
+        { titre: "Montant (€)", valeur: l => String(l.montant).replace(".", ",") },
+        { titre: "Mode de règlement", valeur: l => l.mode || "" }
+      ], lignes),
       "text/csv;charset=utf-8"
     );
   };
@@ -6229,13 +6624,21 @@ function OngletLivreRecettes({ factures, eleves }) {
   return h("div", null,
     h("div", { style: { background: C.navyPale, border: `1px solid ${C.bord}`, borderRadius: 12, padding: 13, marginBottom: 16, fontSize: 12, color: C.gray, lineHeight: 1.65 } },
       h("div", { style: { fontSize: 13, fontWeight: 800, color: C.gold, marginBottom: 5 } }, "Livre des recettes"),
-      "Registre chronologique des encaissements que tout micro-entrepreneur doit tenir. Il se remplit tout seul : une ligne par facture marquée payée."),
+      "Registre chronologique de l'argent reçu, que tout micro-entrepreneur doit tenir. Il se remplit tout seul : une ligne par versement enregistré avec « Encaisser ». C'est ce montant qui se déclare à l'URSSAF."),
+
+    annees.length > 1 && h("div", { style: { display: "flex", gap: 6, marginBottom: 12 } },
+      annees.map(a => h("button", {
+        key: a, onClick: () => setAnnee(a),
+        style: { background: a === annee ? C.navy : C.surface, color: a === annee ? "#fff" : C.gray,
+          border: `1px solid ${a === annee ? C.navy : C.bord}`, borderRadius: 999, padding: "5px 12px",
+          fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }
+      }, a))),
 
     h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 } },
       [
-        { e: "🧾", v: emises.length, l: "Émises", c: C.gold },
-        { e: "✅", v: encaissees.length, l: "Encaissées", c: C.green },
-        { e: "💰", v: total.toFixed(2).replace(".", ",") + "€", l: "Recettes", c: C.green }
+        { e: "🧾", v: lignes.length, l: "Versements", c: C.gold },
+        { e: "📅", v: eur(ceMois), l: "Ce mois", c: C.green },
+        { e: "💰", v: eur(total), l: "Année " + annee, c: C.green }
       ].map((s, i) => h("div", {
         key: i,
         style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "13px 8px", textAlign: "center" }
@@ -6245,22 +6648,23 @@ function OngletLivreRecettes({ factures, eleves }) {
         h("div", { style: { fontSize: 10, color: C.gray, fontWeight: 700, textTransform: "uppercase" } }, s.l)))
     ),
 
-    encaissees.length === 0
+    lignes.length === 0
       ? h("div", { style: { textAlign: "center", padding: "30px 20px", color: C.gray, fontSize: 13, lineHeight: 1.6 } },
-          "Aucune recette encaissée pour l'instant.", h("br", null),
-          "Une facture entre ici quand elle est émise puis marquée payée.")
+          "Aucune recette encaissée en " + annee + ".", h("br", null),
+          "Un versement entre ici dès qu'il est enregistré avec « Encaisser ».")
       : h("div", null,
           h("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 } },
-            encaissees.map(f => h("div", {
-              key: f.id,
+            lignes.map(l => h("div", {
+              key: l.id,
               style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
             },
               h("div", { style: { minWidth: 0 } },
-                h("div", { style: { fontSize: 13, fontWeight: 700, color: C.texte } }, f.numero, " · ", nomDe(f.eleveId)),
+                h("div", { style: { fontSize: 13, fontWeight: 700, color: C.texte } }, numero(l.facture), " · ", nomDe(l.facture)),
                 h("div", { style: { fontSize: 11, color: C.gray } },
-                  new Date(f.datePaiement + "T00:00:00").toLocaleDateString("fr-FR"), " · ", f.mode)),
-              h("span", { style: { fontSize: 14, fontWeight: 800, color: C.green, fontFamily: FD, whiteSpace: "nowrap" } }, f.montant, "€")))),
-          h(BtnPrimary, { label: "⬇️ Exporter le livre des recettes (CSV)", onClick: exporter, full: true })
+                  new Date(l.date + "T00:00:00").toLocaleDateString("fr-FR"), l.mode ? " · " + l.mode : "",
+                  l.facture && l.facture.statut === "annulee" ? " · facture annulée" : "")),
+              h("span", { style: { fontSize: 14, fontWeight: 800, color: C.green, fontFamily: FD, whiteSpace: "nowrap" } }, eur(l.montant))))),
+          h(BtnPrimary, { label: "⬇️ Exporter le livre des recettes " + annee + " (CSV)", onClick: exporter, full: true })
         )
   );
 }
@@ -6284,7 +6688,7 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
     try {
       const tout = await onExportComplet();
       telechargerFichier(
-        `sauvegarde-boostetude-${new Date().toISOString().slice(0, 10)}.json`,
+        `sauvegarde-boostetude-${todayStr()}.json`,
         JSON.stringify(tout, null, 2),
         "application/json"
       );
@@ -6321,7 +6725,7 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
   );
 }
 
-function ModuleReglages({ parametres, eleves, groupes, appels, factures, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel }) {
+function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaissements, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel }) {
   const [onglet, setOnglet] = useState("entreprise");
   const onglets = [
     { k: "entreprise", l: "🏛 Entreprise" },
@@ -6344,7 +6748,7 @@ function ModuleReglages({ parametres, eleves, groupes, appels, factures, profs, 
       }, l))),
     onglet === "entreprise" && h(OngletEntreprise, { parametres, onSave: onSaveParametres }),
     onglet === "profs" && h(OngletProfesseurs, { profs, groupes, appels, onSaveTaux, onSaveTel }),
-    onglet === "recettes" && h(OngletLivreRecettes, { factures, eleves }),
+    onglet === "recettes" && h(OngletLivreRecettes, { factures, eleves, encaissements }),
     onglet === "donnees" && h(OngletDonnees, { eleves, groupes, appels, factures, onExportComplet })
   );
 }
@@ -6369,7 +6773,7 @@ const seancesDuMois = (profId, ym, appels, groupes) => {
   return Object.entries(appels || {})
     .filter(([cle, presences]) => {
       const [tag, groupeId, date] = cle.split(":");
-      if (tag !== "ap" || !date || !date.startsWith(ym)) return false;
+      if (tag !== "ap" || !date || !date.startsWith(ym) || estFuture(date)) return false;
       if (!siens.includes(groupeId)) return false;
       return Object.values(presences || {}).some(Boolean);
     })
@@ -6415,8 +6819,8 @@ const makeRemunerationWhatsApp = (prof, ym, seances, heures, montant, taux) =>
   `Merci pour ton travail de ce mois-ci.\n` +
   `Fouad Elmkhanter — Boost'Étude`;
 
-function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel }) {
-  const [mois, setMois] = useState(nowYM());
+function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial }) {
+  const [mois, setMois] = useState(moisInitial || nowYM());
   const [edition, setEdition] = useState(null);   // { id, champ, valeur }
   const [deplie, setDeplie] = useState(null);
   const [envoi, setEnvoi] = useState(null);
@@ -6964,6 +7368,16 @@ function App() {
       setGroupes(gr);
       setAppels(ap);
       setFactures(fa);
+      if (role === "admin") {
+        // Rattrape les appels enregistrés par les collègues (voir brouillonsEnRetard).
+        const retards = brouillonsEnRetard(el, gr, ap, fa);
+        if (retards.length) {
+          try {
+            for (const r of retards) await api.syncFacture(r.eid, r.dates, r.montant);
+            setFactures((await api.fetchAll(true)).factures);
+          } catch (e) {/* non bloquant : l'appel suivant de l'administrateur rattrapera */}
+        }
+      }
       setComptesRendus(await api.fetchComptesRendus());
       if (role === "admin") {
         setEncaissements(await api.fetchEncaissements().catch(() => []));
@@ -7042,7 +7456,7 @@ function App() {
       for (const eid of grp.eids || []) {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
-        const depuis = dernierePeriodeFin(eid, fa);
+        const depuis = dejaFacturees(eid, fa);
         const dates = seancesOuvertes(eid, ap, gr, depuis);
         const montant = parseFloat((dates.length * 2 * ele.th).toFixed(2));
         await api.syncFacture(eid, dates, montant);
@@ -7190,8 +7604,12 @@ function App() {
     full: true
   })));
   const isAdmin = monRole === "admin";
-  const nbAbsNJ = Object.entries(appels).filter(([k]) => k.split(":")[2]?.startsWith(nowYM())).reduce((s, [, p]) => s + Object.values(p).filter(v => v === "absent_nj").length, 0);
-  const nbImpayes = factures.filter(f => f.statut === "en_attente" || f.statut === "impaye").length;
+  const nbAbsNJ = Object.entries(appels).filter(([k]) => k.split(":")[2]?.startsWith(nowYM()) && !estFuture(k.split(":")[2])).reduce((s, [, p]) => s + Object.values(p).filter(v => v === "absent_nj").length, 0);
+  // Badge Factures = ce qui demande un geste : brouillons arrivés au seuil (à
+  // envoyer) et factures émises qui attendent encore un règlement.
+  const seuilFact = Math.max(1, parseInt(parametres?.seuil_facturation, 10) || SEUIL_FACTURATION_DEFAUT);
+  const nbImpayes = factures.filter(f => f.statut !== "annulee" && f.statut !== "paye" && (
+    f.numero ? resteDu(f) > 0 : f.stageId || (f.nbSeances || 0) >= seuilFact)).length;
   // Un inscrit sans facture valide, c'est une recette qui dort : le badge le dit.
   const nbStagesAFacturer = inscrits.filter(i => {
     if (!i.factureId) return true;
@@ -7363,7 +7781,8 @@ function App() {
     eleves: eleves,
     groupes: groupes,
     appels: appels,
-    factures: factures
+    factures: factures,
+    encaissements: encaissements
   }), tab === "eleves" && isAdmin && /*#__PURE__*/React.createElement(ModuleEleves, {
     eleves: eleves,
     groupes: groupes,
@@ -7422,6 +7841,7 @@ function App() {
     groupes: groupes,
     appels: appels,
     factures: factures,
+    encaissements: encaissements,
     profs: profs,
     onSaveParametres: handleSaveParametres,
     onExportComplet: handleExportComplet,

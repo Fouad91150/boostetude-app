@@ -3,12 +3,26 @@
 const depuisUnAn = () => {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
+};
+// Supabase plafonne chaque réponse à 1 000 lignes. Les présences dépassent ce
+// seuil en quelques mois : tronquées sans prévenir, elles faisaient recalculer
+// des brouillons de facture à la baisse. On lit donc par pages, dans un ordre
+// stable, jusqu'à la dernière.
+const PAGE_LIGNES = 1000;
+const toutLire = async construire => {
+  let tout = [];
+  for (let de = 0; ; de += PAGE_LIGNES) {
+    const { data, error } = await construire().order("id").range(de, de + PAGE_LIGNES - 1);
+    if (error) return { data: null, error };
+    tout = tout.concat(data || []);
+    if (!data || data.length < PAGE_LIGNES) return { data: tout, error: null };
+  }
 };
 const api = {
   async fetchAll(isAdmin) {
     const borne = depuisUnAn();
-    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), sb.from("cours").select("*").gte("date", borne), sb.from("presences").select("*").gte("date", borne), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
+    const [el, gr, co, pr, eg] = await Promise.all([sb.from("eleves").select("*").order("nom"), sb.from("groupes").select("*").order("nom"), toutLire(() => sb.from("cours").select("*").gte("date", borne)), toutLire(() => sb.from("presences").select("*").gte("date", borne)), sb.from("eleves_groupes").select("eleve_id,groupe_id")]);
     for (const r of [el, gr, co, pr, eg]) if (r.error) throw r.error;
     let elList = (el.data || []).map(normalizeEleveDB);
     const egList = eg.data || [];
@@ -42,7 +56,7 @@ const api = {
       const {
         data: paData,
         error: paErr
-      } = await sb.from("paiements").select("*");
+      } = await toutLire(() => sb.from("paiements").select("*"));
       if (paErr) throw paErr;
       factures = (paData || []).map(p => ({
         id: p.id,
@@ -258,10 +272,16 @@ const api = {
     const {
       data: existing,
       error: e1
-    } = await sb.from("paiements").select("id,statut").eq("eleve_id", eleveId).is("numero", null).is("stage_id", null).neq("statut", "paye").maybeSingle();
+    } = await sb.from("paiements").select("id,statut,montant_encaisse").eq("eleve_id", eleveId).is("numero", null).is("stage_id", null).neq("statut", "paye").maybeSingle();
     if (e1) throw e1;
     if (existing) {
-      if (dates.length === 0) {
+      // Un brouillon qui a déjà reçu de l'argent ne disparaît pas : ses
+      // versements sont au livre des recettes. Il passe à zéro séance, et
+      // l'écran montre alors une somme à rendre ou à reporter.
+      if (dates.length === 0 && Number(existing.montant_encaisse) > 0) {
+        const { error } = await sb.from("paiements").update({ nb_seances: 0, montant: 0, dates_seances: [] }).eq("id", existing.id);
+        if (error) throw error;
+      } else if (dates.length === 0) {
         const {
           error
         } = await sb.from("paiements").delete().eq("id", existing.id);
@@ -359,7 +379,8 @@ Object.assign(api, {
 // ─── API SUIVI DE SÉANCE & BILANS ────────────────────────────
 Object.assign(api, {
   async fetchComptesRendus() {
-    const { data, error } = await sb.from("comptes_rendus").select("*").gte("date", depuisUnAn()).order("date", { ascending: false });
+    const { data, error } = await toutLire(() => sb.from("comptes_rendus").select("*").gte("date", depuisUnAn()));
+    (data || []).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     if (error) throw error;
     return data || [];
   },
@@ -407,7 +428,8 @@ Object.assign(api, {
 // recalcule seule le solde de la facture et son statut (déclencheur).
 Object.assign(api, {
   async fetchEncaissements() {
-    const { data, error } = await sb.from("encaissements").select("*").order("date", { ascending: false });
+    const { data, error } = await toutLire(() => sb.from("encaissements").select("*"));
+    (data || []).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     if (error) throw error;
     return (data || []).map(e => ({
       id: e.id,

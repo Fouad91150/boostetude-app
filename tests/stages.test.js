@@ -226,3 +226,20 @@ describe("Stages et cours ne se mélangent pas", () => {
     assert.match(String(api.syncFacture), /is\("stage_id", null\)/);
   });
 });
+
+describe("Envoi d'une facture de stage", () => {
+  test("elle figure dans « à envoyer » dès sa création, sans attendre de seuil", async () => {
+    const { ModuleFacturation } = chargerApp();
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const React = (await import("react")).default;
+    const html = renderToStaticMarkup(React.createElement(ModuleFacturation, {
+      eleves: [{ ...eleveType, id: "e1" }], groupes: [], appels: {},
+      factures: [factureType({ id: "s", eleveId: "e1", stageId: "st1", prestation: "Stage de Toussaint", nbSeances: 0, montant: 149, datesSeances: [] })],
+      parametres: { ...parametresComplets, seuil_facturation: 3 }, encaissements: [],
+      onSaveFacture: async () => {}, onDeleteFacture: async () => {}, onDeleteFactureEnCours: async () => {},
+      onEmettreFacture: async () => "F2026-0001", onRecharger: async () => {}
+    }));
+    assert.ok(html.includes("Stage de Toussaint"));
+    assert.ok(html.includes("1 facture à envoyer") || html.includes("à envoyer"));
+  });
+});
