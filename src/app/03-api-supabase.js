@@ -77,6 +77,9 @@ const api = {
         // et `stageId` dit que cette facture ne suit pas l'appel.
         prestation: p.prestation ?? null,
         stageId: p.stage_id ?? null,
+        // Lien Stripe propre à la facture, et le montant pour lequel il a été créé.
+        lienPaiement: p.stripe_lien_url ?? null,
+        lienMontant: p.stripe_lien_montant == null ? null : Number(p.stripe_lien_montant),
         datesSeances: (p.dates_seances ?? []).map(d => typeof d === "string" ? {
           date: d,
           matiere: ""
@@ -106,7 +109,8 @@ const api = {
       parent_tel: form.tel,
       parent_email: form.email,
       notes: form.notes,
-      groupe_id: groupeIds[0] || null
+      groupe_id: groupeIds[0] || null,
+      ...(typeof form.offert === "boolean" ? { premier_cours_offert: form.offert } : {})
     };
     let eleveId = form.id;
     if (eleveId) {
@@ -439,6 +443,24 @@ Object.assign(api, {
       mode: e.mode || "Espèces",
       note: e.note || ""
     }));
+  },
+  // Paiement par carte : le lien est fabriqué côté serveur (fonction Supabase
+  // « stripe-lien-facture »), seul endroit où vit la clé Stripe. Il porte le
+  // montant exact du reste à payer et ne sert qu'une fois ; le paiement revient
+  // tout seul en versement « Carte » (fonction « stripe-webhook »).
+  async lienPaiement(factureId) {
+    if (!sb.functions) throw new Error("Paiement en ligne indisponible.");
+    const { data, error } = await sb.functions.invoke("stripe-lien-facture", { body: { facture_id: factureId } });
+    if (error) {
+      let message = error.message;
+      try {
+        const corps = await error.context?.json?.();
+        if (corps && corps.erreur) message = corps.erreur;
+      } catch (_) { /* réponse non lisible : on garde le message générique */ }
+      throw new Error(message);
+    }
+    if (!data || !data.url) throw new Error((data && data.erreur) || "Lien de paiement indisponible.");
+    return data;
   },
   async ajouterEncaissement(factureId, { montant, mode, date, note }) {
     const valeur = Math.round((Number(montant) || 0) * 100) / 100;

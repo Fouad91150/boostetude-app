@@ -72,8 +72,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.4.0";
-window.__APP_BUILD = "2026-10-11";
+<script>window.__APP_VERSION = "3.5.2";
+window.__APP_BUILD = "2026-10-12";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -183,7 +183,9 @@ const normalizeEleveDB = x => ({
   tel: x.parent_tel ?? "",
   parent: x.parent_nom ?? `Parent de ${x.prenom}`,
   notes: x.notes ?? "",
-  groupe_id: x.groupe_id ?? null
+  groupe_id: x.groupe_id ?? null,
+  // Nouvel élève : sa toute première séance n'est pas facturée.
+  offert: x.premier_cours_offert === true
 });
 // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : l'appartenance
 // à un groupe passe par la table de liaison eleves_groupes (many-to-many). La colonne
@@ -324,6 +326,9 @@ const api = {
         // et `stageId` dit que cette facture ne suit pas l'appel.
         prestation: p.prestation ?? null,
         stageId: p.stage_id ?? null,
+        // Lien Stripe propre à la facture, et le montant pour lequel il a été créé.
+        lienPaiement: p.stripe_lien_url ?? null,
+        lienMontant: p.stripe_lien_montant == null ? null : Number(p.stripe_lien_montant),
         datesSeances: (p.dates_seances ?? []).map(d => typeof d === "string" ? {
           date: d,
           matiere: ""
@@ -353,7 +358,8 @@ const api = {
       parent_tel: form.tel,
       parent_email: form.email,
       notes: form.notes,
-      groupe_id: groupeIds[0] || null
+      groupe_id: groupeIds[0] || null,
+      ...(typeof form.offert === "boolean" ? { premier_cours_offert: form.offert } : {})
     };
     let eleveId = form.id;
     if (eleveId) {
@@ -686,6 +692,24 @@ Object.assign(api, {
       mode: e.mode || "Espèces",
       note: e.note || ""
     }));
+  },
+  // Paiement par carte : le lien est fabriqué côté serveur (fonction Supabase
+  // « stripe-lien-facture »), seul endroit où vit la clé Stripe. Il porte le
+  // montant exact du reste à payer et ne sert qu'une fois ; le paiement revient
+  // tout seul en versement « Carte » (fonction « stripe-webhook »).
+  async lienPaiement(factureId) {
+    if (!sb.functions) throw new Error("Paiement en ligne indisponible.");
+    const { data, error } = await sb.functions.invoke("stripe-lien-facture", { body: { facture_id: factureId } });
+    if (error) {
+      let message = error.message;
+      try {
+        const corps = await error.context?.json?.();
+        if (corps && corps.erreur) message = corps.erreur;
+      } catch (_) { /* réponse non lisible : on garde le message générique */ }
+      throw new Error(message);
+    }
+    if (!data || !data.url) throw new Error((data && data.erreur) || "Lien de paiement indisponible.");
+    return data;
   },
   async ajouterEncaissement(factureId, { montant, mode, date, note }) {
     const valeur = Math.round((Number(montant) || 0) * 100) / 100;
@@ -1107,6 +1131,16 @@ const dejaFacturees = (eid, factures) => {
 
 // Ce qu'il reste à régler sur une facture, une fois les versements déduits.
 const resteDu = f => Math.max(0, Math.round(((f?.montant || 0) - (f?.encaisse || 0)) * 100) / 100);
+// Un lien Stripe vaut pour le montant exact qui lui a donné naissance. Après un
+// acompte en espèces, il réclamerait trop : on ne le propose plus, et le prochain
+// envoi en fabrique un neuf, au bon montant.
+const lienPaiementValide = f => {
+  if (!f || !f.lienPaiement || !f.numero) return null;
+  if (f.statut === "paye" || f.statut === "annulee") return null;
+  const reste = resteDu(f);
+  if (!(reste > 0)) return null;
+  return Math.round(Number(f.lienMontant) * 100) / 100 === reste ? f.lienPaiement : null;
+};
 // Chaque séance renvoyée porte sa matière (un même élève peut suivre plusieurs
 // matières, ex. Maths + Physique) afin que la facture détaille quoi a été suivi.
 // Toute présence de l'élève compte, y compris dans un groupe qu'il a quitté
@@ -1134,6 +1168,25 @@ const seancesOuvertes = (eid, appels, groupes, depuis) => {
     return { date, matiere: groupeDe(gid)?.matiere || "", groupeId: gid };
   }).sort((a, b) => a.date.localeCompare(b.date));
 };
+// ── Premier cours offert (3.5.2) ──────────────────────────────────────────
+// La séance offerte est la toute première présence de l'élève, tous groupes
+// confondus. Elle figure sur la facture (à 0 €) mais ne se paie pas ; elle compte
+// pour le rythme de facturation, et une fois facturée elle ne revient jamais.
+const premiereSeance = (eid, appels) => Object.entries(appels || {})
+  .filter(([k, p]) => k.startsWith("ap:") && p && p[eid] === "present")
+  .map(([k]) => { const [, gid, date] = k.split(":"); return { gid, date }; })
+  .sort((a, b) => a.date.localeCompare(b.date) || a.gid.localeCompare(b.gid))[0] || null;
+const marquerOfferte = (eleve, dates, appels) => {
+  if (!eleve || !eleve.offert) return dates;
+  const p = premiereSeance(eleve.id, appels);
+  if (!p) return dates;
+  return (dates || []).map(d => d.date === p.date && (!d.groupeId || d.groupeId === p.gid) ? { ...d, offert: true } : d);
+};
+const montantSeances = (eleve, dates) =>
+  parseFloat(((dates || []).filter(d => !d.offert).length * 2 * eleve.th).toFixed(2));
+const seancesOffertes = dates => (dates || []).filter(d => d.offert);
+const seancesPayantes = dates => (dates || []).filter(d => !d.offert);
+
 // Regroupe une liste de séances {date,matiere} par matière, en conservant l'ordre
 // d'apparition — utilisé partout où la facture doit détailler Maths/Physique séparément.
 const groupParMatiere = dates => {
@@ -1181,12 +1234,12 @@ const lignesFacture = (matieres, montant, thSecours) => {
 const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
-    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures))
-      .filter(d => !estFuture(d.date));
+    const dates = marquerOfferte(e, seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures))
+      .filter(d => !estFuture(d.date)), appels);
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     return dates.length > actuel
-      ? { eid: e.id, dates, montant: parseFloat((dates.length * 2 * e.th).toFixed(2)) }
+      ? { eid: e.id, dates, montant: montantSeances(e, dates) }
       : null;
   })
   .filter(Boolean);
@@ -1202,11 +1255,31 @@ const detailMatieresTxt = dates => {
 // Toutes les trois séances par défaut — le seuil se règle dans l'onglet Réglages.
 const SEUIL_FACTURATION_DEFAUT = 3;
 
-// Trois moyens acceptés. Pour un virement, le nom de l'enfant est indispensable :
-// sans lui, un virement arrive sans qu'on sache à qui le rattacher.
-const MOYENS_PAIEMENT_TEXTE = e =>
-  `Règlement au choix : espèces, chèque ou virement bancaire. ` +
-  `Pour un virement, merci d'indiquer « ${e.prenom} ${e.nom} » en référence.`;
+// Trois moyens acceptés depuis la 3.5.1 : carte (Stripe), Wero, virement — plus de
+// chèque. Pour un Wero ou un virement, le nom de l'enfant est indispensable : sans
+// lui, l'argent arrive sans qu'on sache à qui le rattacher.
+// L'identifiant Wero (numéro ou e-mail) se règle dans Réglages → Entreprise ;
+// l'application le communique ici dès que les réglages sont chargés.
+let CONTACT_WERO = "";
+const definirContactWero = v => { CONTACT_WERO = String(v || "").trim(); };
+const weroTxt = () => `Wero${CONTACT_WERO ? ` au ${CONTACT_WERO}` : ""}`;
+const MOYENS_PAIEMENT_TEXTE = (e, lienCarte) =>
+  `Règlement au choix : ` +
+  (lienCarte
+    ? `carte bancaire via le lien ci-dessus (paiement sécurisé Stripe), `
+    : `carte bancaire (lien de paiement sécurisé Stripe sur simple demande), `) +
+  `${weroTxt()}, virement bancaire ou espèces. ` +
+  `Pour un Wero ou un virement, merci d'indiquer « ${e.prenom} ${e.nom} » en référence.`;
+// Version courte, pour les SMS.
+const moyensCourts = e => `Carte (Stripe), ${weroTxt()}, virement ou espèces (référence : ${e.prenom} ${e.nom}).`;
+// Séances payées et séance offerte, pour le décompte des messages.
+const nbPayees = (nb, dates) => Math.max(0, (nb || 0) - seancesOffertes(dates).length);
+const offerteTxt = dates => seancesOffertes(dates).length ? `1re séance offerte (${fmtDateCourt(seancesOffertes(dates)[0].date)})` : "";
+
+// Le lien de paiement par carte, quand la facture en a un : en tête des moyens de
+// règlement, parce que c'est le plus rapide pour le parent.
+const ligneCarteWhatsApp = url => url ? `💳 *Payer en ligne par carte :*\n${url}\n\n` : "";
+const ligneCarteTexte = url => url ? `Paiement en ligne par carte bancaire : ${url}\n\n` : "";
 
 const mentionAutomatique = seuil =>
   `Message automatique envoyé toutes les ${seuil || SEUIL_FACTURATION_DEFAUT} séances.`;
@@ -1215,12 +1288,14 @@ const signatureBoost = "Fouad Elmkhanter — Boost'Étude";
 
 // Un stage se vend au forfait : il n'y a pas de séances à compter, seulement un
 // libellé et un prix. `prestation`, quand elle est là, remplace le décompte.
-const makeFactureEmail = (e, mois, nb, total, dates, seuil, prestation) => ({
+const makeFactureEmail = (e, mois, nb, total, dates, seuil, prestation, lienCarte) => ({
   sujet: `Facture ${mois} — ${e.prenom} ${e.nom} — Boost'Étude`,
   corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
-         (prestation ? `${prestation}\n` : `Séances : ${nb} × 2 h × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
+         (prestation ? `${prestation}\n` : `Séances : ${nbPayees(nb, dates)} × 2 h × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n` +
+           (offerteTxt(dates) ? `${offerteTxt(dates)} : 0 €\n` : "")) +
          `TOTAL : ${montantTxt(total)}\n\n` +
-         `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
+         ligneCarteTexte(lienCarte) +
+         `${MOYENS_PAIEMENT_TEXTE(e, lienCarte)}\n\n` +
          `La facture détaillée est jointe en PDF.\n\n` +
          `Cordialement,\n${signatureBoost}\nboostetude@gmail.com\n\n` +
          `— ${mentionAutomatique(seuil)}`
@@ -1231,12 +1306,12 @@ const makeFactureSMS = (e, mois, nb, total, seuil, prestation) =>
   (prestation
     ? `Bonjour, voici la facture de ${e.prenom} — ${prestation} : ${montantTxt(total)}.\n`
     : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n`) +
-  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}).\n` +
+  `${moyensCourts(e)}\n` +
   `${mentionAutomatique(seuil)}`;
 
 // WhatsApp accepte un balisage léger : *gras* et _italique_. Le PDF part à côté,
 // par le partage du téléphone — un message seul ne peut pas l'emporter.
-const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation) => {
+const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, lienCarte) => {
   const detail = groupParMatiere(dates || []);
   const lignes = prestation ? "" : detail.length > 1
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
@@ -1247,9 +1322,11 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation) => {
          lignes +
          (prestation
            ? `• ${prestation}\n`
-           : `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n`) +
+           : `• ${nbPayees(nb, dates)} séance${nbPayees(nb, dates) > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n` +
+             (offerteTxt(dates) ? `• 🎁 ${offerteTxt(dates)}\n` : "")) +
          `• *Total : ${montantTxt(total)}*\n\n` +
-         `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
+         ligneCarteWhatsApp(lienCarte) +
+         `${MOYENS_PAIEMENT_TEXTE(e, lienCarte)}\n\n` +
          `La facture détaillée est jointe en PDF.\n\n` +
          `_${mentionAutomatique(seuil)}_\n\n` +
          `${signatureBoost}`;
@@ -1262,7 +1339,7 @@ const makeRappelEmail = (e, mois, total, dates) => ({
 const makeRappelSMS = (e, mois, total) =>
   `Boost'Étude — Rappel ${mois}\n` +
   `Bonjour, le règlement de ${montantTxt(total)} pour ${e.prenom} est en attente.\n` +
-  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}). Merci !`;
+  `${moyensCourts(e)} Merci !`;
 const makeAbsenceEmail = (e, dateLabel, justifie) => ({
   sujet: `Absence de ${e.prenom} ${e.nom} — ${dateLabel} — Boost'Étude`,
   corps: justifie ? `Bonjour ${e.parent},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude — M. El Mkhanter\nboostetude@gmail.com` : `Bonjour ${e.parent},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude — M. El Mkhanter\nboostetude@gmail.com`
@@ -1275,7 +1352,7 @@ const {
 
 // Relance : courtoise, précise, et qui rappelle ce qui a déjà été versé — un
 // parent qui a donné un acompte n'aime pas qu'on lui réclame la somme entière.
-const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse) => {
+const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse, lienCarte) => {
   const detail = groupParMatiere(dates || []);
   const lignes = detail.length > 1
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
@@ -1286,7 +1363,8 @@ const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse) => {
          lignes +
          ((dejaVerse || 0) > 0 ? `• Déjà versé : ${montantTxt(dejaVerse)}\n` : "") +
          `• *Reste à régler : ${montantTxt(reste)}*\n\n` +
-         `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
+         ligneCarteWhatsApp(lienCarte) +
+         `${MOYENS_PAIEMENT_TEXTE(e, lienCarte)}\n\n` +
          `Merci d'avance,\n${signatureBoost}`;
 };
 // ─── ATOMES ──────────────────────────────────────────────────
@@ -1832,7 +1910,8 @@ function PanneauEnvoi({
   // Forfait de stage : le message annonce la prestation, pas un décompte de séances.
   const forfait = (facture && facture.prestation) || null;
 
-  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil, forfait)
+  const lienCarte = isF ? lienPaiementValide(facture) : null;
+  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil, forfait, lienCarte)
     : isA ? makeAbsenceEmail(eleve, mois, justifie)
     : isAl ? makeAlerteAbsencesEmail(eleve, dates || [])
     : makeRappelEmail(eleve, mois, montant, dates);
@@ -1842,7 +1921,7 @@ function PanneauEnvoi({
     : makeRappelSMS(eleve, mois, montant);
   // WhatsApp accepte un texte plus long et un balisage léger : on lui donne la
   // version soignée plutôt que le SMS tronqué.
-  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait)
+  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait, lienCarte)
     : isAl ? makeAlerteAbsencesWhatsApp(eleve, dates || [])
     : smsText;
 
@@ -2297,7 +2376,9 @@ function FormulaireEleve({
     email: "",
     tel: "",
     parent: "",
-    notes: ""
+    notes: "",
+    // Nouvel élève : premier cours offert, sauf s'il était déjà là l'an dernier.
+    offert: true
   };
   // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : on part de tous les
   // groupes où il apparaît déjà (via eleves_groupes, reflété dans groupes[].eids).
@@ -2311,6 +2392,7 @@ function FormulaireEleve({
   const [tel, setTel] = useState(def.tel);
   const [parent, setParent] = useState(def.parent);
   const [notes, setNotes] = useState(def.notes);
+  const [offert, setOffert] = useState(def.offert === true);
   const [saving, setSaving] = useState(false);
   const th = TARIFS_H[niveau] ?? 12.5;
   const toggleGroupe = gid => setGroupeIds(ids => ids.includes(gid) ? ids.filter(x => x !== gid) : [...ids, gid]);
@@ -2327,7 +2409,8 @@ function FormulaireEleve({
         tel,
         parent,
         notes,
-        groupeIds
+        groupeIds,
+        offert
       });
     } finally {
       setSaving(false);
@@ -2480,8 +2563,15 @@ function FormulaireEleve({
     label: "Mode de paiement",
     value: mp,
     onChange: setMp,
-    options: ["Virement", "Espèces", "Chèque"]
-  })), /*#__PURE__*/React.createElement(InputArea, {
+    options: ["Virement", "Carte", "Wero", "Espèces"]
+  }), /*#__PURE__*/React.createElement("label", {
+    style: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: C.texte, marginTop: 6, cursor: "pointer" }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: offert,
+    onChange: ev => setOffert(ev.target.checked),
+    style: { width: 20, height: 20 }
+  }), "🎁 Premier cours offert (nouvel élève)")), /*#__PURE__*/React.createElement(InputArea, {
     label: "Notes",
     value: notes,
     onChange: setNotes,
@@ -3841,7 +3931,10 @@ function ModuleAppel({
 // Cet écran enregistre donc des VERSEMENTS, pas un état « payé ». Le reste dû s'en
 // déduit, et le statut de la facture aussi : en attente, partiellement réglée, ou
 // soldée. C'est la base qui fait ce calcul, pour qu'il soit le même partout.
-const MODES_REGLEMENT = ["Espèces", "Virement", "Chèque"];
+// Moyens acceptés : virement, carte (Stripe), Wero — plus de chèque depuis la 3.5.1.
+// Les espèces restent pointables si un parent en remet. Les paiements Stripe par
+// lien de facture s'inscrivent seuls ; ceux des liens généraux se pointent ici.
+const MODES_REGLEMENT = ["Virement", "Carte", "Wero", "Espèces"];
 
 function ModaleFacture({
   eleve,
@@ -3859,7 +3952,7 @@ function ModaleFacture({
   const reste = Math.max(0, Math.round((total - verses) * 100) / 100);
 
   const [montant, setMontant] = useState(reste > 0 ? String(reste).replace(".", ",") : "");
-  const [mode, setMode] = useState(eleve.mp && MODES_REGLEMENT.includes(eleve.mp) ? eleve.mp : "Espèces");
+  const [mode, setMode] = useState(eleve.mp && MODES_REGLEMENT.includes(eleve.mp) ? eleve.mp : "Virement");
   const [date, setDate] = useState(todayStr());
   const [notes, setNotes] = useState(existante?.notes ?? "");
   const [enCours, setEnCours] = useState(false);
@@ -3937,7 +4030,8 @@ function ModaleFacture({
 
       // ── Où en est cette facture ──────────────────────────────
       h("div", { style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16 } },
-        ligneSolde(`${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(eleve.th)}/h`, euros(total), C.texte),
+        ligneSolde(`${nbPayees(nb, dates)} séance${nbPayees(nb, dates) > 1 ? "s" : ""} de 2 h × ${euros(eleve.th)}/h`, euros(total), C.texte),
+        seancesOffertes(dates).length ? ligneSolde("🎁 1re séance offerte", euros(0), C.green) : null,
         verses > 0 ? ligneSolde("Déjà versé", "− " + euros(verses), C.green) : null,
         h("div", { style: { height: 1, background: C.surface, margin: "6px 0" } }),
         ligneSolde(reste > 0 ? "Reste à payer" : "Soldée", euros(reste), reste > 0 ? C.gold : C.green, true)),
@@ -4132,10 +4226,16 @@ const chaineUTF16 = texte => {
 function PageA4() {
   const LARGEUR = 595.28, HAUTEUR = 841.89;
   const ops = [];
+  const liens = [];
   const y = v => HAUTEUR - v;
 
   return {
-    LARGEUR, HAUTEUR,
+    LARGEUR, HAUTEUR, liens,
+    /** Zone cliquable qui ouvre une adresse web (annotation /Link du PDF). */
+    lien(x, haut, largeur, hauteur, url) {
+      liens.push({ x1: n2(x), y1: n2(y(haut + hauteur)), x2: n2(x + largeur), y2: n2(y(haut)), url: String(url) });
+      return this;
+    },
     rect(x, haut, largeur, hauteur, couleur) {
       const [r, v, b] = couleur;
       ops.push(`${n2(r)} ${n2(v)} ${n2(b)} rg`, `${n2(x)} ${n2(y(haut + hauteur))} ${n2(largeur)} ${n2(hauteur)} re f`);
@@ -4174,15 +4274,23 @@ function PageA4() {
 /** Assemble les objets, la table de références et la queue du fichier. */
 function assemblerPDF(page, meta = {}) {
   const flux = page.flux();
+  // Les annotations de lien viennent après les sept objets fixes (n° 8 et suivants).
+  // Une adresse web est en ASCII : on n'échappe que ce que la syntaxe PDF réserve.
+  const liens = page.liens || [];
+  const annots = liens.length ? ` /Annots [${liens.map((_, i) => `${8 + i} 0 R`).join(" ")}]` : "";
   const objets = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n2(page.LARGEUR)} ${n2(page.HAUTEUR)}] ` +
-      "/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
+      `/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R${annots} >>`,
     `<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
-    "<< /Title (" + chaineUTF16(meta.titre || "Facture") + ") /Producer (Boost'Etude) >>"
+    "<< /Title (" + chaineUTF16(meta.titre || "Facture") + ") /Producer (Boost'Etude) >>",
+    ...liens.map(l => {
+      const uri = l.url.replace(/[^\x21-\x7e]/g, "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+      return `<< /Type /Annot /Subtype /Link /Rect [${l.x1} ${l.y1} ${l.x2} ${l.y2}] /Border [0 0 0] /A << /S /URI /URI (${uri}) >> >>`;
+    })
   ];
 
   let fichier = "%PDF-1.4\n";
@@ -4195,7 +4303,7 @@ function assemblerPDF(page, meta = {}) {
   const debutXref = fichier.length;
   fichier += `xref\n0 ${objets.length + 1}\n0000000000 65535 f \n`;
   positions.forEach(p => { fichier += String(p).padStart(10, "0") + " 00000 n \n"; });
-  fichier += `trailer\n<< /Size ${objets.length + 1} /Root 1 0 R /Info ${objets.length} 0 R >>\n` +
+  fichier += `trailer\n<< /Size ${objets.length + 1} /Root 1 0 R /Info 7 0 R >>\n` +
              `startxref\n${debutXref}\n%%EOF`;
 
   const octets = new Uint8Array(fichier.length);
@@ -4220,7 +4328,10 @@ function construireFacturePDF(facture, eleve, parametres) {
   const DROITE = page.LARGEUR - M;
   const dates = facture.datesSeances || [];
   const emise = !!facture.numero;
-  const matieres = groupParMatiere(dates);
+  // La séance offerte s'imprime sur sa propre ligne, à 0 € : les lignes payantes
+  // gardent leur vrai tarif horaire.
+  const offertes = seancesOffertes(dates);
+  const matieres = groupParMatiere(seancesPayantes(dates));
   // Un stage de vacances ne se compte pas en séances : il se vend au forfait.
   // `prestation` porte alors le libellé à imprimer, et le montant fait la ligne.
   const forfait = (facture.prestation || "").trim();
@@ -4293,7 +4404,7 @@ function construireFacturePDF(facture, eleve, parametres) {
     page.texte(COL_TARIF, y + 4, euros(total), { taille: 9.5, couleur: GRIS, align: "droite" });
     page.texte(DROITE - 10, y + 4, euros(total), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
     y = Math.max(finLigne, y + 24) + 6;
-  } else if (matieres.length === 0) {
+  } else if (matieres.length === 0 && offertes.length === 0) {
     page.texte(M + 10, y + 6, "Aucune séance", { taille: 9.5, couleur: GRIS });
     y += 24;
   } else {
@@ -4315,6 +4426,15 @@ function construireFacturePDF(facture, eleve, parametres) {
         y += 4;
       }
     });
+  }
+  if (!forfait && offertes.length) {
+    if (matieres.length) { page.ligne(M, y - 3, DROITE, y - 3, [0.9, 0.9, 0.9], 0.5); y += 4; }
+    page.texte(M + 10, y + 4, "Première séance offerte", { taille: 10, gras: true, couleur: NOIR });
+    page.texte(M + 10, y + 16, `Cours d'essai · ${offertes.map(d => fmtDateCourt(d.date)).join(" · ")}`, { taille: 8, couleur: GRIS });
+    page.texte(COL_QTE, y + 4, `${offertes.length * 2} h`, { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(COL_TARIF, y + 4, "offert", { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(DROITE - 10, y + 4, euros(0), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
+    y += 30;
   }
 
   // ── Total, acomptes, net à payer ───────────────────────────
@@ -4348,7 +4468,19 @@ function construireFacturePDF(facture, eleve, parametres) {
       { taille: 9, couleur: [0.18, 0.49, 0.31] });
     y += 13;
   } else {
-    y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
+    // Paiement par carte : un encadré doré, cliquable d'un bout à l'autre. On montre
+    // l'adresse en clair, pour qui imprime la facture.
+    const lienCarte = lienPaiementValide(facture);
+    definirContactWero(p.wero);
+    if (lienCarte) {
+      page.rect(M, y - 2, DROITE - M, 34, [0.99, 0.97, 0.9]);
+      page.ligne(M, y - 2, M, y + 32, OR_PDF, 2);
+      page.texte(M + 10, y + 11, "Payer en ligne par carte bancaire — cliquez ici", { taille: 9.5, gras: true, couleur: NAVY_PDF });
+      page.texte(M + 10, y + 24, lienCarte, { taille: 8, couleur: GRIS });
+      page.lien(M, y - 2, DROITE - M, 34, lienCarte);
+      y += 42;
+    }
+    y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve, lienCarte), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
     y += 2;
     if (p.iban) {
       page.rect(M, y, DROITE - M, 44, [0.97, 0.97, 0.96]);
@@ -4452,7 +4584,8 @@ function VueImpression({
   const p = parametres || {};
   const dates = facture.datesSeances || [];
   const periodeLabelCours = dates.length ? dates.length === 1 ? fmtDateLongue(dates[0].date) : `${fmtDateCourt(dates[0].date)} – ${fmtDateCourt(dates[dates.length - 1].date)}` : "Facture en cours";
-  const matieresGroupees = groupParMatiere(dates);
+  const offertes = seancesOffertes(dates);
+  const matieresGroupees = groupParMatiere(seancesPayantes(dates));
   // Un stage se vend au forfait : une seule ligne, le libellé et son montant.
   const forfait = (facture.prestation || "").trim();
   const periodeForfait = facture.periodeDebut
@@ -4606,7 +4739,15 @@ function VueImpression({
                     h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(g.th)}/h`),
                     h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(total)));
                 })
-              : h("tr", null, h("td", { colSpan: 4, style: { padding: "12px", color: "#888", textAlign: "center" } }, "Aucune séance"))
+              : offertes.length ? null
+              : h("tr", null, h("td", { colSpan: 4, style: { padding: "12px", color: "#888", textAlign: "center" } }, "Aucune séance")),
+            !forfait && offertes.length ? h("tr", { style: { borderTop: "1px solid #eee" } },
+              h("td", { style: { padding: "12px" } },
+                h("div", { style: { fontWeight: 600, color: "#222" } }, "🎁 Première séance offerte"),
+                h("div", { style: { fontSize: 11, color: "#888", marginTop: 2 } }, `Cours d'essai · ${offertes.map(d => fmtDateCourt(d.date)).join(" · ")}`)),
+              h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${offertes.length * 2} h`),
+              h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, "offert"),
+              h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(0))) : null
           )
         ),
 
@@ -4629,6 +4770,12 @@ function VueImpression({
             facture.statut === "paye" && h("span", { style: { color: "#2e7d4f", fontWeight: 700, marginLeft: 8 } },
               "✅ Payée", facture.datePaiement ? ` le ${new Date(facture.datePaiement).toLocaleDateString("fr-FR")}` : "", ` (${facture.mode})`)),
           p.delai_paiement ? h("div", null, p.delai_paiement) : null,
+          lienPaiementValide(facture) ? h("a", {
+            href: lienPaiementValide(facture), target: "_blank", rel: "noopener noreferrer",
+            style: { display: "block", marginTop: 8, background: "#fdf8e8", borderLeft: `3px solid ${C.goldVif}`, borderRadius: 6,
+                     padding: "8px 10px", fontSize: 12, fontWeight: 700, color: "#0a1428", textDecoration: "none" }
+          }, "💳 Payer en ligne par carte bancaire",
+            h("div", { style: { fontSize: 10.5, fontWeight: 400, color: "#666", wordBreak: "break-all" } }, lienPaiementValide(facture))) : null,
           (p.iban && facture.statut !== "paye") ? h("div", { style: { marginTop: 8, background: "#f8f8f6", borderRadius: 6, padding: "8px 10px", fontSize: 11, lineHeight: 1.6 } },
             h("div", { style: { fontWeight: 700, color: "#333" } }, "Coordonnées bancaires"),
             p.titulaire_compte ? h("div", null, p.titulaire_compte) : null,
@@ -4767,14 +4914,27 @@ function ModuleFacturation({
     try {
       const numero = await onEmettreFacture(f.id, { recharger: false });
       const emise = { ...f, numero: numero || f.numero, dateEmission: todayStr() };
-      const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
 
       if (tel) {
+        // La fenêtre est déjà réservée : on peut prendre le temps de demander le
+        // lien de paiement par carte. S'il ne vient pas (clé Stripe absente, réseau),
+        // la facture part quand même, avec les moyens habituels.
+        let lienCarte = null, sansCarte = "";
+        try {
+          lienCarte = (await api.lienPaiement(emise.id)).url;
+        } catch (err) {
+          sansCarte = err && err.message ? err.message : "lien indisponible";
+        }
+        const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienCarte);
         const lien = `https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(texte)}`;
         if (fenetre) fenetre.location = lien;
         else window.open(lien, "_blank", "noopener,noreferrer");
-        signalerSucces(`Facture ${emise.numero} émise — WhatsApp s'ouvre sur ${el.parent || "le parent"}. Le PDF se joint depuis la carte.`);
+        if (lienCarte) signalerSucces(`Facture ${emise.numero} émise, avec son lien de paiement par carte — WhatsApp s'ouvre sur ${el.parent || "le parent"}. Le PDF se joint depuis la carte.`);
+        else signalerInfo(`Facture ${emise.numero} émise — WhatsApp s'ouvre sur ${el.parent || "le parent"}, sans lien carte (${sansCarte}).`);
       } else {
+        // Ici le partage système doit partir dans la foulée du clic : pas de détour
+        // par le serveur, la facture part avec les moyens habituels.
+        const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
         // Sans numéro de parent, le partage système reste le seul chemin.
         const r = await partagerFacturePDF(emise, el, parametres, texte);
         if (r.telecharge) signalerInfo(`Facture ${emise.numero} émise, PDF téléchargé — cet appareil ne sait pas partager de fichier.`);
@@ -5428,7 +5588,7 @@ function ModuleFacturation({
         signalerErreur({ message: `Pas de téléphone parent pour ${e.prenom} : ajoutez-le dans sa fiche.` });
         return;
       }
-      const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
+      const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienPaiementValide(f));
       window.open(`https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(texte)}`, "_blank", "noopener,noreferrer");
     };
 
@@ -5436,7 +5596,7 @@ function ModuleFacturation({
     const partager = async () => {
       setEnvoiEnCours(f.id);
       try {
-        const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
+        const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienPaiementValide(f));
         const r = await partagerFacturePDF(f, e, parametres, texte);
         if (r.telecharge) signalerInfo("PDF téléchargé — cet appareil ne sait pas partager de fichier.");
         else if (r.partage) signalerSucces(`Facture ${f.numero} envoyée.`);
@@ -5573,13 +5733,26 @@ function ModuleRelances({ eleves, factures, parametres, onRelancer }) {
 
   const relancer = async (f, el, canal) => {
     const reste = resteDu(f);
-    const texte = makeRappelWhatsApp(el, f.numero, reste, f.datesSeances, Number(f.encaisse) || 0);
     const tel = telWhatsApp((el.tel || "").replace(/\s/g, ""));
-    const lien = canal === "sms"
-      ? `sms:${(el.tel || "").replace(/\s/g, "")}?body=${encodeURIComponent(texte)}`
-      : `https://wa.me/${tel}?text=${encodeURIComponent(texte)}`;
-    // On ouvre la conversation d'abord : l'autorisation du geste ne dure qu'un instant.
-    window.open(lien, "_blank", "noopener,noreferrer");
+    const fabriquer = lienCarte => {
+      const texte = makeRappelWhatsApp(el, f.numero, reste, f.datesSeances, Number(f.encaisse) || 0, lienCarte);
+      return canal === "sms"
+        ? `sms:${(el.tel || "").replace(/\s/g, "")}?body=${encodeURIComponent(texte)}`
+        : `https://wa.me/${tel}?text=${encodeURIComponent(texte)}`;
+    };
+    const lienConnu = lienPaiementValide(f);
+    if (lienConnu || canal === "sms") {
+      // On ouvre la conversation d'abord : l'autorisation du geste ne dure qu'un instant.
+      window.open(fabriquer(lienConnu), "_blank", "noopener,noreferrer");
+    } else {
+      // Pas encore de lien au bon montant (acompte reçu, facture d'avant Stripe) :
+      // on réserve la fenêtre tout de suite, puis on demande un lien neuf.
+      const fenetre = window.open("", "_blank");
+      let lienCarte = null;
+      try { lienCarte = (await api.lienPaiement(f.id)).url; } catch (_) { /* relance sans carte */ }
+      if (fenetre) fenetre.location = fabriquer(lienCarte);
+      else window.open(fabriquer(lienCarte), "_blank", "noopener,noreferrer");
+    }
     setEnCours(f.id);
     try {
       await onRelancer(f.id);
@@ -6545,7 +6718,9 @@ function OngletEntreprise({ parametres, onSave }) {
         "Enregistrées dans la base, accessibles à vous seul. Elles n'apparaissent que sur les factures non réglées, jamais dans le code du site."),
       h(InputText, { label: "Titulaire du compte", value: f.titulaire_compte || "", onChange: v => set("titulaire_compte", v) }),
       h(InputText, { label: "IBAN", value: f.iban || "", onChange: v => set("iban", v), placeholder: "FR76 …" }),
-      h(InputText, { label: "BIC", value: f.bic || "", onChange: v => set("bic", v) })
+      h(InputText, { label: "BIC", value: f.bic || "", onChange: v => set("bic", v) }),
+      h(InputText, { label: "Wero — numéro ou e-mail de réception", value: f.wero || "", onChange: v => set("wero", v),
+        placeholder: "06 12 34 56 78" })
     ),
 
     h("div", { style: { borderTop: `1px solid ${C.bord}`, paddingTop: 14 } },
@@ -7294,6 +7469,8 @@ function App() {
   const [appels, setAppels] = useState({});
   const [factures, setFactures] = useState([]);
   const [parametres, setParametres] = useState(null);
+  // Les messages aux parents citent l'identifiant Wero réglé dans Réglages.
+  definirContactWero(parametres && parametres.wero);
   const [comptesRendus, setComptesRendus] = useState([]);
   const [encaissements, setEncaissements] = useState([]);
   const [stages, setStages] = useState([]);
@@ -7457,8 +7634,8 @@ function App() {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
-        const dates = seancesOuvertes(eid, ap, gr, depuis);
-        const montant = parseFloat((dates.length * 2 * ele.th).toFixed(2));
+        const dates = marquerOfferte(ele, seancesOuvertes(eid, ap, gr, depuis), ap);
+        const montant = montantSeances(ele, dates);
         await api.syncFacture(eid, dates, montant);
       }
     }

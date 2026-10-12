@@ -28,6 +28,15 @@ const requete = () => {
 const sbFactice = {
   from: requete,
   rpc: async () => ({ data: "F2026-0001", error: null }),
+  // Fonctions serveur (paiement Stripe). Un test peut imposer sa réponse via
+  // globalThis.__reponseFonction ; chaque appel est noté dans __appelsFonctions.
+  functions: {
+    invoke: async (nom, options) => {
+      (globalThis.__appelsFonctions ||= []).push({ nom, options });
+      if (globalThis.__reponseFonction) return globalThis.__reponseFonction(nom, options);
+      return { data: { url: "https://buy.stripe.com/test_lien", montant: 75 }, error: null };
+    }
+  },
   auth: {
     getSession: async () => ({ data: {} }),
     onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
@@ -70,6 +79,8 @@ export function chargerApp() {
              construireFacturePDF, nomFichierFacture, PanneauEnvoi, ModaleFacture,
              resteDu, dernierePeriodeFin, seancesOuvertes, euros, montantTxt, StatutBadge,
              ModuleRelances, aRelancer, joursDepuis, makeRappelWhatsApp,
+             lienPaiementValide, MODES_REGLEMENT, definirContactWero,
+             premiereSeance, marquerOfferte, montantSeances, seancesOuvertes, VueImpression,
              appliquerRemiseMulti, cleFoyer, compterInscriptions,
              makeFactureWhatsApp, makeFactureSMS, makeFactureEmail, makeRappelSMS,
              MOYENS_PAIEMENT_TEXTE, mentionAutomatique, SEUIL_FACTURATION_DEFAUT,

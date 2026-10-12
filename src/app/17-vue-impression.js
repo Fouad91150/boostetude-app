@@ -27,7 +27,8 @@ function VueImpression({
   const p = parametres || {};
   const dates = facture.datesSeances || [];
   const periodeLabelCours = dates.length ? dates.length === 1 ? fmtDateLongue(dates[0].date) : `${fmtDateCourt(dates[0].date)} – ${fmtDateCourt(dates[dates.length - 1].date)}` : "Facture en cours";
-  const matieresGroupees = groupParMatiere(dates);
+  const offertes = seancesOffertes(dates);
+  const matieresGroupees = groupParMatiere(seancesPayantes(dates));
   // Un stage se vend au forfait : une seule ligne, le libellé et son montant.
   const forfait = (facture.prestation || "").trim();
   const periodeForfait = facture.periodeDebut
@@ -181,7 +182,15 @@ function VueImpression({
                     h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(g.th)}/h`),
                     h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(total)));
                 })
-              : h("tr", null, h("td", { colSpan: 4, style: { padding: "12px", color: "#888", textAlign: "center" } }, "Aucune séance"))
+              : offertes.length ? null
+              : h("tr", null, h("td", { colSpan: 4, style: { padding: "12px", color: "#888", textAlign: "center" } }, "Aucune séance")),
+            !forfait && offertes.length ? h("tr", { style: { borderTop: "1px solid #eee" } },
+              h("td", { style: { padding: "12px" } },
+                h("div", { style: { fontWeight: 600, color: "#222" } }, "🎁 Première séance offerte"),
+                h("div", { style: { fontSize: 11, color: "#888", marginTop: 2 } }, `Cours d'essai · ${offertes.map(d => fmtDateCourt(d.date)).join(" · ")}`)),
+              h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${offertes.length * 2} h`),
+              h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, "offert"),
+              h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(0))) : null
           )
         ),
 
@@ -204,6 +213,12 @@ function VueImpression({
             facture.statut === "paye" && h("span", { style: { color: "#2e7d4f", fontWeight: 700, marginLeft: 8 } },
               "✅ Payée", facture.datePaiement ? ` le ${new Date(facture.datePaiement).toLocaleDateString("fr-FR")}` : "", ` (${facture.mode})`)),
           p.delai_paiement ? h("div", null, p.delai_paiement) : null,
+          lienPaiementValide(facture) ? h("a", {
+            href: lienPaiementValide(facture), target: "_blank", rel: "noopener noreferrer",
+            style: { display: "block", marginTop: 8, background: "#fdf8e8", borderLeft: `3px solid ${C.goldVif}`, borderRadius: 6,
+                     padding: "8px 10px", fontSize: 12, fontWeight: 700, color: "#0a1428", textDecoration: "none" }
+          }, "💳 Payer en ligne par carte bancaire",
+            h("div", { style: { fontSize: 10.5, fontWeight: 400, color: "#666", wordBreak: "break-all" } }, lienPaiementValide(facture))) : null,
           (p.iban && facture.statut !== "paye") ? h("div", { style: { marginTop: 8, background: "#f8f8f6", borderRadius: 6, padding: "8px 10px", fontSize: 11, lineHeight: 1.6 } },
             h("div", { style: { fontWeight: 700, color: "#333" } }, "Coordonnées bancaires"),
             p.titulaire_compte ? h("div", null, p.titulaire_compte) : null,

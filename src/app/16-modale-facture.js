@@ -6,7 +6,10 @@
 // Cet écran enregistre donc des VERSEMENTS, pas un état « payé ». Le reste dû s'en
 // déduit, et le statut de la facture aussi : en attente, partiellement réglée, ou
 // soldée. C'est la base qui fait ce calcul, pour qu'il soit le même partout.
-const MODES_REGLEMENT = ["Espèces", "Virement", "Chèque"];
+// Moyens acceptés : virement, carte (Stripe), Wero — plus de chèque depuis la 3.5.1.
+// Les espèces restent pointables si un parent en remet. Les paiements Stripe par
+// lien de facture s'inscrivent seuls ; ceux des liens généraux se pointent ici.
+const MODES_REGLEMENT = ["Virement", "Carte", "Wero", "Espèces"];
 
 function ModaleFacture({
   eleve,
@@ -24,7 +27,7 @@ function ModaleFacture({
   const reste = Math.max(0, Math.round((total - verses) * 100) / 100);
 
   const [montant, setMontant] = useState(reste > 0 ? String(reste).replace(".", ",") : "");
-  const [mode, setMode] = useState(eleve.mp && MODES_REGLEMENT.includes(eleve.mp) ? eleve.mp : "Espèces");
+  const [mode, setMode] = useState(eleve.mp && MODES_REGLEMENT.includes(eleve.mp) ? eleve.mp : "Virement");
   const [date, setDate] = useState(todayStr());
   const [notes, setNotes] = useState(existante?.notes ?? "");
   const [enCours, setEnCours] = useState(false);
@@ -102,7 +105,8 @@ function ModaleFacture({
 
       // ── Où en est cette facture ──────────────────────────────
       h("div", { style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16 } },
-        ligneSolde(`${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(eleve.th)}/h`, euros(total), C.texte),
+        ligneSolde(`${nbPayees(nb, dates)} séance${nbPayees(nb, dates) > 1 ? "s" : ""} de 2 h × ${euros(eleve.th)}/h`, euros(total), C.texte),
+        seancesOffertes(dates).length ? ligneSolde("🎁 1re séance offerte", euros(0), C.green) : null,
         verses > 0 ? ligneSolde("Déjà versé", "− " + euros(verses), C.green) : null,
         h("div", { style: { height: 1, background: C.surface, margin: "6px 0" } }),
         ligneSolde(reste > 0 ? "Reste à payer" : "Soldée", euros(reste), reste > 0 ? C.gold : C.green, true)),

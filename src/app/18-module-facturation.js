@@ -115,14 +115,27 @@ function ModuleFacturation({
     try {
       const numero = await onEmettreFacture(f.id, { recharger: false });
       const emise = { ...f, numero: numero || f.numero, dateEmission: todayStr() };
-      const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
 
       if (tel) {
+        // La fenêtre est déjà réservée : on peut prendre le temps de demander le
+        // lien de paiement par carte. S'il ne vient pas (clé Stripe absente, réseau),
+        // la facture part quand même, avec les moyens habituels.
+        let lienCarte = null, sansCarte = "";
+        try {
+          lienCarte = (await api.lienPaiement(emise.id)).url;
+        } catch (err) {
+          sansCarte = err && err.message ? err.message : "lien indisponible";
+        }
+        const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienCarte);
         const lien = `https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(texte)}`;
         if (fenetre) fenetre.location = lien;
         else window.open(lien, "_blank", "noopener,noreferrer");
-        signalerSucces(`Facture ${emise.numero} émise — WhatsApp s'ouvre sur ${el.parent || "le parent"}. Le PDF se joint depuis la carte.`);
+        if (lienCarte) signalerSucces(`Facture ${emise.numero} émise, avec son lien de paiement par carte — WhatsApp s'ouvre sur ${el.parent || "le parent"}. Le PDF se joint depuis la carte.`);
+        else signalerInfo(`Facture ${emise.numero} émise — WhatsApp s'ouvre sur ${el.parent || "le parent"}, sans lien carte (${sansCarte}).`);
       } else {
+        // Ici le partage système doit partir dans la foulée du clic : pas de détour
+        // par le serveur, la facture part avec les moyens habituels.
+        const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
         // Sans numéro de parent, le partage système reste le seul chemin.
         const r = await partagerFacturePDF(emise, el, parametres, texte);
         if (r.telecharge) signalerInfo(`Facture ${emise.numero} émise, PDF téléchargé — cet appareil ne sait pas partager de fichier.`);
@@ -776,7 +789,7 @@ function ModuleFacturation({
         signalerErreur({ message: `Pas de téléphone parent pour ${e.prenom} : ajoutez-le dans sa fiche.` });
         return;
       }
-      const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
+      const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienPaiementValide(f));
       window.open(`https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(texte)}`, "_blank", "noopener,noreferrer");
     };
 
@@ -784,7 +797,7 @@ function ModuleFacturation({
     const partager = async () => {
       setEnvoiEnCours(f.id);
       try {
-        const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
+        const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienPaiementValide(f));
         const r = await partagerFacturePDF(f, e, parametres, texte);
         if (r.telecharge) signalerInfo("PDF téléchargé — cet appareil ne sait pas partager de fichier.");
         else if (r.partage) signalerSucces(`Facture ${f.numero} envoyée.`);

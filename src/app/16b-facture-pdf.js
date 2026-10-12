@@ -102,10 +102,16 @@ const chaineUTF16 = texte => {
 function PageA4() {
   const LARGEUR = 595.28, HAUTEUR = 841.89;
   const ops = [];
+  const liens = [];
   const y = v => HAUTEUR - v;
 
   return {
-    LARGEUR, HAUTEUR,
+    LARGEUR, HAUTEUR, liens,
+    /** Zone cliquable qui ouvre une adresse web (annotation /Link du PDF). */
+    lien(x, haut, largeur, hauteur, url) {
+      liens.push({ x1: n2(x), y1: n2(y(haut + hauteur)), x2: n2(x + largeur), y2: n2(y(haut)), url: String(url) });
+      return this;
+    },
     rect(x, haut, largeur, hauteur, couleur) {
       const [r, v, b] = couleur;
       ops.push(`${n2(r)} ${n2(v)} ${n2(b)} rg`, `${n2(x)} ${n2(y(haut + hauteur))} ${n2(largeur)} ${n2(hauteur)} re f`);
@@ -144,15 +150,23 @@ function PageA4() {
 /** Assemble les objets, la table de références et la queue du fichier. */
 function assemblerPDF(page, meta = {}) {
   const flux = page.flux();
+  // Les annotations de lien viennent après les sept objets fixes (n° 8 et suivants).
+  // Une adresse web est en ASCII : on n'échappe que ce que la syntaxe PDF réserve.
+  const liens = page.liens || [];
+  const annots = liens.length ? ` /Annots [${liens.map((_, i) => `${8 + i} 0 R`).join(" ")}]` : "";
   const objets = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n2(page.LARGEUR)} ${n2(page.HAUTEUR)}] ` +
-      "/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
+      `/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R${annots} >>`,
     `<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
-    "<< /Title (" + chaineUTF16(meta.titre || "Facture") + ") /Producer (Boost'Etude) >>"
+    "<< /Title (" + chaineUTF16(meta.titre || "Facture") + ") /Producer (Boost'Etude) >>",
+    ...liens.map(l => {
+      const uri = l.url.replace(/[^\x21-\x7e]/g, "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+      return `<< /Type /Annot /Subtype /Link /Rect [${l.x1} ${l.y1} ${l.x2} ${l.y2}] /Border [0 0 0] /A << /S /URI /URI (${uri}) >> >>`;
+    })
   ];
 
   let fichier = "%PDF-1.4\n";
@@ -165,7 +179,7 @@ function assemblerPDF(page, meta = {}) {
   const debutXref = fichier.length;
   fichier += `xref\n0 ${objets.length + 1}\n0000000000 65535 f \n`;
   positions.forEach(p => { fichier += String(p).padStart(10, "0") + " 00000 n \n"; });
-  fichier += `trailer\n<< /Size ${objets.length + 1} /Root 1 0 R /Info ${objets.length} 0 R >>\n` +
+  fichier += `trailer\n<< /Size ${objets.length + 1} /Root 1 0 R /Info 7 0 R >>\n` +
              `startxref\n${debutXref}\n%%EOF`;
 
   const octets = new Uint8Array(fichier.length);
@@ -190,7 +204,10 @@ function construireFacturePDF(facture, eleve, parametres) {
   const DROITE = page.LARGEUR - M;
   const dates = facture.datesSeances || [];
   const emise = !!facture.numero;
-  const matieres = groupParMatiere(dates);
+  // La séance offerte s'imprime sur sa propre ligne, à 0 € : les lignes payantes
+  // gardent leur vrai tarif horaire.
+  const offertes = seancesOffertes(dates);
+  const matieres = groupParMatiere(seancesPayantes(dates));
   // Un stage de vacances ne se compte pas en séances : il se vend au forfait.
   // `prestation` porte alors le libellé à imprimer, et le montant fait la ligne.
   const forfait = (facture.prestation || "").trim();
@@ -263,7 +280,7 @@ function construireFacturePDF(facture, eleve, parametres) {
     page.texte(COL_TARIF, y + 4, euros(total), { taille: 9.5, couleur: GRIS, align: "droite" });
     page.texte(DROITE - 10, y + 4, euros(total), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
     y = Math.max(finLigne, y + 24) + 6;
-  } else if (matieres.length === 0) {
+  } else if (matieres.length === 0 && offertes.length === 0) {
     page.texte(M + 10, y + 6, "Aucune séance", { taille: 9.5, couleur: GRIS });
     y += 24;
   } else {
@@ -285,6 +302,15 @@ function construireFacturePDF(facture, eleve, parametres) {
         y += 4;
       }
     });
+  }
+  if (!forfait && offertes.length) {
+    if (matieres.length) { page.ligne(M, y - 3, DROITE, y - 3, [0.9, 0.9, 0.9], 0.5); y += 4; }
+    page.texte(M + 10, y + 4, "Première séance offerte", { taille: 10, gras: true, couleur: NOIR });
+    page.texte(M + 10, y + 16, `Cours d'essai · ${offertes.map(d => fmtDateCourt(d.date)).join(" · ")}`, { taille: 8, couleur: GRIS });
+    page.texte(COL_QTE, y + 4, `${offertes.length * 2} h`, { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(COL_TARIF, y + 4, "offert", { taille: 9.5, couleur: GRIS, align: "droite" });
+    page.texte(DROITE - 10, y + 4, euros(0), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
+    y += 30;
   }
 
   // ── Total, acomptes, net à payer ───────────────────────────
@@ -318,7 +344,19 @@ function construireFacturePDF(facture, eleve, parametres) {
       { taille: 9, couleur: [0.18, 0.49, 0.31] });
     y += 13;
   } else {
-    y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
+    // Paiement par carte : un encadré doré, cliquable d'un bout à l'autre. On montre
+    // l'adresse en clair, pour qui imprime la facture.
+    const lienCarte = lienPaiementValide(facture);
+    definirContactWero(p.wero);
+    if (lienCarte) {
+      page.rect(M, y - 2, DROITE - M, 34, [0.99, 0.97, 0.9]);
+      page.ligne(M, y - 2, M, y + 32, OR_PDF, 2);
+      page.texte(M + 10, y + 11, "Payer en ligne par carte bancaire — cliquez ici", { taille: 9.5, gras: true, couleur: NAVY_PDF });
+      page.texte(M + 10, y + 24, lienCarte, { taille: 8, couleur: GRIS });
+      page.lien(M, y - 2, DROITE - M, 34, lienCarte);
+      y += 42;
+    }
+    y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve, lienCarte), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
     y += 2;
     if (p.iban) {
       page.rect(M, y, DROITE - M, 44, [0.97, 0.97, 0.96]);

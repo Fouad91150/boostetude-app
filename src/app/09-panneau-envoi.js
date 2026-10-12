@@ -40,7 +40,8 @@ function PanneauEnvoi({
   // Forfait de stage : le message annonce la prestation, pas un décompte de séances.
   const forfait = (facture && facture.prestation) || null;
 
-  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil, forfait)
+  const lienCarte = isF ? lienPaiementValide(facture) : null;
+  const emailData = isF ? makeFactureEmail(eleve, mois, nb, montant, dates, seuil, forfait, lienCarte)
     : isA ? makeAbsenceEmail(eleve, mois, justifie)
     : isAl ? makeAlerteAbsencesEmail(eleve, dates || [])
     : makeRappelEmail(eleve, mois, montant, dates);
@@ -50,7 +51,7 @@ function PanneauEnvoi({
     : makeRappelSMS(eleve, mois, montant);
   // WhatsApp accepte un texte plus long et un balisage léger : on lui donne la
   // version soignée plutôt que le SMS tronqué.
-  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait)
+  const waText = isF ? makeFactureWhatsApp(eleve, mois, nb, montant, dates, seuil, forfait, lienCarte)
     : isAl ? makeAlerteAbsencesWhatsApp(eleve, dates || [])
     : smsText;
 

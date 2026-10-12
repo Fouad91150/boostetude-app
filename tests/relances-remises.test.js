@@ -126,7 +126,8 @@ describe("Le message de relance", () => {
   test("il rappelle comment payer et signe", () => {
     const { makeRappelWhatsApp } = chargerApp();
     const t = makeRappelWhatsApp(ELEVE(), "F2026-0001", 90, [], 0);
-    assert.match(t, /espèces, chèque ou virement/);
+    assert.match(t, /carte bancaire .*Wero, virement bancaire ou espèces/);
+    assert.doesNotMatch(t, /chèque/i);
     assert.match(t, /Fouad Elmkhanter/);
   });
 });
