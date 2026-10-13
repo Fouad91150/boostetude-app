@@ -180,3 +180,17 @@ Trois cycles audit → correction → ré-audit, chaque correction verrouillée 
 - Fonctions de base fermées au public : `detecter_rappels` exposait prénoms et
   téléphones des parents à quiconque détenait la clé publique.
 - `.gitignore` : `node_modules/` et `.apercu/` (données réelles) ne partent jamais sur GitHub.
+
+## 3.5.0 — envoi de facture en un geste (13 octobre 2026)
+
+« Envoyer » (ou « Renvoyer », ou une relance) fait tout : émission, lien de paiement
+Stripe au montant exact (`stripe-lien-facture`), PDF déposé en ligne (bucket public
+`factures`, nom imprévisible, jamais listable), puis WhatsApp s'ouvre sur le numéro du
+parent avec le message complet — lien du PDF, lien de paiement, Wero / virement / espèces.
+Il ne reste qu'à appuyer sur Envoyer dans WhatsApp.
+
+Quand le parent paie par carte, `stripe-webhook` enregistre le versement « Carte
+bancaire » : la facture passe seule à « payée » et entre au livre des recettes.
+
+Plus de chèque dans les messages ni sur le PDF ; Wero se renseigne dans Réglages →
+Entreprise. Code : `src/app/16c-envoi-parent.js`, tests : `tests/envoi-parent.test.js`.

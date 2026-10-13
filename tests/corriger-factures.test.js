@@ -67,7 +67,7 @@ describe("Ce que propose chaque état", () => {
     // Deux gestes distincts : ouvrir la conversation du bon parent, puis joindre
     // le document. Le lien wa.me ne transporte pas de fichier, le partage système
     // ne choisit pas le destinataire.
-    assert.ok(html.includes("WhatsApp"));
+    assert.ok(html.includes("Renvoyer"), "renvoi en un geste : PDF en lien + paiement");
     assert.ok(html.includes("PDF"));
     assert.ok(html.includes("Encaisser"));
     assert.ok(html.includes("Annuler"));

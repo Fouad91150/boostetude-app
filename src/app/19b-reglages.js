@@ -103,9 +103,8 @@ function OngletEntreprise({ parametres, onSave }) {
         "Enregistrées dans la base, accessibles à vous seul. Elles n'apparaissent que sur les factures non réglées, jamais dans le code du site."),
       h(InputText, { label: "Titulaire du compte", value: f.titulaire_compte || "", onChange: v => set("titulaire_compte", v) }),
       h(InputText, { label: "IBAN", value: f.iban || "", onChange: v => set("iban", v), placeholder: "FR76 …" }),
-      h(InputText, { label: "BIC", value: f.bic || "", onChange: v => set("bic", v) }),
-      h(InputText, { label: "Wero — numéro ou e-mail de réception", value: f.wero || "", onChange: v => set("wero", v),
-        placeholder: "06 12 34 56 78" })
+      h(InputText, { label: "Wero (numéro ou e-mail de réception)", value: f.wero || "", onChange: v => set("wero", v), placeholder: "07 44 94 45 02" }),
+      h(InputText, { label: "BIC", value: f.bic || "", onChange: v => set("bic", v) })
     ),
 
     h("div", { style: { borderTop: `1px solid ${C.bord}`, paddingTop: 14 } },

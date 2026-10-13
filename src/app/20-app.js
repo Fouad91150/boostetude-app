@@ -9,8 +9,6 @@ function App() {
   const [appels, setAppels] = useState({});
   const [factures, setFactures] = useState([]);
   const [parametres, setParametres] = useState(null);
-  // Les messages aux parents citent l'identifiant Wero réglé dans Réglages.
-  definirContactWero(parametres && parametres.wero);
   const [comptesRendus, setComptesRendus] = useState([]);
   const [encaissements, setEncaissements] = useState([]);
   const [stages, setStages] = useState([]);
@@ -174,8 +172,8 @@ function App() {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
-        const dates = marquerOfferte(ele, seancesOuvertes(eid, ap, gr, depuis), ap);
-        const montant = montantSeances(ele, dates);
+        const dates = seancesOuvertes(eid, ap, gr, depuis);
+        const montant = parseFloat((dates.length * 2 * ele.th).toFixed(2));
         await api.syncFacture(eid, dates, montant);
       }
     }

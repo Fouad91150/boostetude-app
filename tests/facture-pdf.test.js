@@ -105,18 +105,11 @@ describe("Ce que le parent doit comprendre", () => {
     return textesDessines(construireFacturePDF(factureEmise(), eleveType, parametresComplets));
   };
 
-  test("les trois moyens de paiement sont proposés : carte, Wero, virement — plus de chèque", () => {
+  test("les moyens de paiement sont proposés, sans chèque", () => {
     const t = dessine();
-    assert.match(t, /carte bancaire/i);
-    assert.match(t, /Wero/);
+    assert.match(t, /esp\u00e8ces/i, "espèces");
+    assert.doesNotMatch(t, /ch\u00e8que/i, "plus de chèque");
     assert.match(t, /virement/i);
-    assert.doesNotMatch(t, /ch\u00e8que/i, "le chèque n'est plus accepté");
-  });
-
-  test("l'identifiant Wero des réglages est imprimé", () => {
-    const { construireFacturePDF } = chargerApp();
-    const t = textesDessines(construireFacturePDF(factureEmise(), eleveType, { ...parametresComplets, wero: "06 11 22 33 44" }));
-    assert.match(t, /Wero au 06 11 22 33 44/);
   });
 
   test("le nom de l'enfant est donné comme référence de virement", () => {

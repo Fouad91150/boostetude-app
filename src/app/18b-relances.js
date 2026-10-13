@@ -40,32 +40,17 @@ function ModuleRelances({ eleves, factures, parametres, onRelancer }) {
   const eleveDe = id => eleves.find(e => e.id === id);
 
   const relancer = async (f, el, canal) => {
-    const reste = resteDu(f);
-    const tel = telWhatsApp((el.tel || "").replace(/\s/g, ""));
-    const fabriquer = lienCarte => {
-      const texte = makeRappelWhatsApp(el, f.numero, reste, f.datesSeances, Number(f.encaisse) || 0, lienCarte);
-      return canal === "sms"
-        ? `sms:${(el.tel || "").replace(/\s/g, "")}?body=${encodeURIComponent(texte)}`
-        : `https://wa.me/${tel}?text=${encodeURIComponent(texte)}`;
-    };
-    const lienConnu = lienPaiementValide(f);
-    if (lienConnu || canal === "sms") {
-      // On ouvre la conversation d'abord : l'autorisation du geste ne dure qu'un instant.
-      window.open(fabriquer(lienConnu), "_blank", "noopener,noreferrer");
-    } else {
-      // Pas encore de lien au bon montant (acompte reçu, facture d'avant Stripe) :
-      // on réserve la fenêtre tout de suite, puis on demande un lien neuf.
-      const fenetre = window.open("", "_blank");
-      let lienCarte = null;
-      try { lienCarte = (await api.lienPaiement(f.id)).url; } catch (_) { /* relance sans carte */ }
-      if (fenetre) fenetre.location = fabriquer(lienCarte);
-      else window.open(fabriquer(lienCarte), "_blank", "noopener,noreferrer");
-    }
+    // La fenêtre se réserve d'abord : l'autorisation du geste ne dure qu'un instant.
+    // Puis la relance porte, elle aussi, le PDF et le lien de paiement au reste dû.
+    const fenetre = reserverFenetre(el.tel);
     setEnCours(f.id);
     try {
+      const r = await envoyerAuParent({ facture: f, eleve: el, parametres, fenetre, relance: true, canal });
+      if (r.soucis.length) signalerInfo(`Relance sans ${r.soucis.join(" ni ")}.`);
       await onRelancer(f.id);
       signalerSucces(`Relance notée pour ${el.prenom}.`);
     } catch (e) {
+      if (fenetre) fenetre.close();
       signalerErreur(e);
     }
     setEnCours(null);

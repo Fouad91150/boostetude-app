@@ -16,29 +16,18 @@ const DATES = [
 ];
 
 describe("Moyens de paiement", () => {
-  test("les moyens sont nommés : carte (Stripe), Wero, virement, espèces — sans chèque", () => {
+  test("espèces et virement sont nommés, plus de chèque", () => {
     const { MOYENS_PAIEMENT_TEXTE } = chargerApp();
     const t = MOYENS_PAIEMENT_TEXTE(eleveType);
-    assert.match(t, /carte bancaire/);
-    assert.match(t, /Stripe/);
-    assert.match(t, /Wero/);
-    assert.match(t, /virement/);
     assert.match(t, /espèces/);
-    assert.doesNotMatch(t, /chèque/i);
+    assert.match(t, /virement/);
+    assert.doesNotMatch(t, /chèque/);
   });
 
-  test("avec un lien de paiement, la carte renvoie au lien ; sans, on le propose sur demande", () => {
+  test("Wero apparaît quand il est renseigné", () => {
     const { MOYENS_PAIEMENT_TEXTE } = chargerApp();
-    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, "https://buy.stripe.com/x"), /via le lien ci-dessus/);
-    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType), /sur simple demande/);
-  });
-
-  test("l'identifiant Wero réglé est cité, et la référence vaut aussi pour Wero", () => {
-    const { MOYENS_PAIEMENT_TEXTE, definirContactWero } = chargerApp();
-    definirContactWero("06 11 22 33 44");
-    const t = MOYENS_PAIEMENT_TEXTE(eleveType);
-    assert.match(t, /Wero au 06 11 22 33 44/);
-    assert.match(t, /Pour un Wero ou un virement/);
+    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, { wero: "07 44 94 45 02" }), /Wero \(07 44 94 45 02\)/);
+    assert.doesNotMatch(MOYENS_PAIEMENT_TEXTE(eleveType, {}), /Wero/);
   });
 
   test("le nom de l'enfant sert de référence au virement", () => {
@@ -128,8 +117,7 @@ describe("Message SMS", () => {
   test("le rappel de paiement propose aussi les trois moyens", () => {
     const { makeRappelSMS } = chargerApp();
     const t = makeRappelSMS(eleveType, "septembre", 75);
-    assert.match(t, /Carte \(Stripe\), Wero, virement ou espèces/);
-    assert.doesNotMatch(t, /chèque/i);
+    assert.match(t, /Espèces, chèque ou virement/);
     assert.match(t, /Lucas Martin/);
   });
 });

@@ -14,9 +14,7 @@ function FormulaireEleve({
     email: "",
     tel: "",
     parent: "",
-    notes: "",
-    // Nouvel élève : premier cours offert, sauf s'il était déjà là l'an dernier.
-    offert: true
+    notes: ""
   };
   // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : on part de tous les
   // groupes où il apparaît déjà (via eleves_groupes, reflété dans groupes[].eids).
@@ -30,7 +28,6 @@ function FormulaireEleve({
   const [tel, setTel] = useState(def.tel);
   const [parent, setParent] = useState(def.parent);
   const [notes, setNotes] = useState(def.notes);
-  const [offert, setOffert] = useState(def.offert === true);
   const [saving, setSaving] = useState(false);
   const th = TARIFS_H[niveau] ?? 12.5;
   const toggleGroupe = gid => setGroupeIds(ids => ids.includes(gid) ? ids.filter(x => x !== gid) : [...ids, gid]);
@@ -47,8 +44,7 @@ function FormulaireEleve({
         tel,
         parent,
         notes,
-        groupeIds,
-        offert
+        groupeIds
       });
     } finally {
       setSaving(false);
@@ -201,15 +197,8 @@ function FormulaireEleve({
     label: "Mode de paiement",
     value: mp,
     onChange: setMp,
-    options: ["Virement", "Carte", "Wero", "Espèces"]
-  }), /*#__PURE__*/React.createElement("label", {
-    style: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: C.texte, marginTop: 6, cursor: "pointer" }
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "checkbox",
-    checked: offert,
-    onChange: ev => setOffert(ev.target.checked),
-    style: { width: 20, height: 20 }
-  }), "🎁 Premier cours offert (nouvel élève)")), /*#__PURE__*/React.createElement(InputArea, {
+    options: ["Virement", "Espèces", "Chèque"]
+  })), /*#__PURE__*/React.createElement(InputArea, {
     label: "Notes",
     value: notes,
     onChange: setNotes,

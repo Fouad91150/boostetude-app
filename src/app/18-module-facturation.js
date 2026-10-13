@@ -109,7 +109,7 @@ function ModuleFacturation({
     const tel = (el.tel || "").replace(/\s/g, "");
     // La fenêtre doit être réservée AVANT l'attente : après un `await`, le
     // téléphone considère le geste expiré et bloque l'ouverture.
-    const fenetre = tel ? window.open("", "_blank") : null;
+    const fenetre = reserverFenetre(tel);
 
     setEnvoiEnCours(f.id);
     try {
@@ -117,25 +117,12 @@ function ModuleFacturation({
       const emise = { ...f, numero: numero || f.numero, dateEmission: todayStr() };
 
       if (tel) {
-        // La fenêtre est déjà réservée : on peut prendre le temps de demander le
-        // lien de paiement par carte. S'il ne vient pas (clé Stripe absente, réseau),
-        // la facture part quand même, avec les moyens habituels.
-        let lienCarte = null, sansCarte = "";
-        try {
-          lienCarte = (await api.lienPaiement(emise.id)).url;
-        } catch (err) {
-          sansCarte = err && err.message ? err.message : "lien indisponible";
-        }
-        const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienCarte);
-        const lien = `https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(texte)}`;
-        if (fenetre) fenetre.location = lien;
-        else window.open(lien, "_blank", "noopener,noreferrer");
-        if (lienCarte) signalerSucces(`Facture ${emise.numero} émise, avec son lien de paiement par carte — WhatsApp s'ouvre sur ${el.parent || "le parent"}. Le PDF se joint depuis la carte.`);
-        else signalerInfo(`Facture ${emise.numero} émise — WhatsApp s'ouvre sur ${el.parent || "le parent"}, sans lien carte (${sansCarte}).`);
+        // Un seul geste : PDF déposé en ligne + lien Stripe au montant exact,
+        // tous deux dans le message, conversation du parent ouverte.
+        const r = await envoyerAuParent({ facture: emise, eleve: el, parametres, seuil, fenetre });
+        direResultatEnvoi(r, el.parent || "le parent", emise.numero);
       } else {
-        // Ici le partage système doit partir dans la foulée du clic : pas de détour
-        // par le serveur, la facture part avec les moyens habituels.
-        const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation);
+        const texte = makeFactureWhatsApp(el, emise.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, null, parametres);
         // Sans numéro de parent, le partage système reste le seul chemin.
         const r = await partagerFacturePDF(emise, el, parametres, texte);
         if (r.telecharge) signalerInfo(`Facture ${emise.numero} émise, PDF téléchargé — cet appareil ne sait pas partager de fichier.`);
@@ -274,7 +261,7 @@ function ModuleFacturation({
     h("div", { style: { fontSize: 15, fontWeight: 800, color: C.gold, fontFamily: FD, marginBottom: 3 } },
       `${aFacturer.length} facture${aFacturer.length > 1 ? "s" : ""} à envoyer`),
     h("div", { style: { fontSize: 12, color: C.gray, marginBottom: 10, lineHeight: 1.5 } },
-      `Ces élèves ont atteint ${seuil} séances (ou ont un stage à facturer). « Envoyer » émet la facture et ouvre le partage avec le PDF et le message — touchez le nom pour la relire avant.`),
+      `Ces élèves ont atteint ${seuil} séances (ou ont un stage à facturer). « Envoyer » émet la facture et ouvre WhatsApp chez le parent, avec le PDF et le lien de paiement par carte : il ne reste qu’à appuyer sur Envoyer. Touchez le nom pour relire la facture avant.`),
     h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       aFacturer.map(f => {
         const el = eleveDe(f.eleveId);
@@ -783,21 +770,30 @@ function ModuleFacturation({
 
     // Ouvrir la conversation du parent, directement sur son numéro : aucun risque
     // de se tromper de destinataire dans la liste des contacts.
-    const whatsappParent = () => {
+    const whatsappParent = async () => {
       const tel = (e.tel || "").replace(/\s/g, "");
       if (!tel) {
         signalerErreur({ message: `Pas de téléphone parent pour ${e.prenom} : ajoutez-le dans sa fiche.` });
         return;
       }
-      const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienPaiementValide(f));
-      window.open(`https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(texte)}`, "_blank", "noopener,noreferrer");
+      // Renvoyer = le même geste que l'envoi : PDF en lien + paiement en ligne.
+      const fenetre = reserverFenetre(tel);
+      setEnvoiEnCours(f.id);
+      try {
+        const r = await envoyerAuParent({ facture: f, eleve: e, parametres, seuil, fenetre, relance: resteDu(f) < f.montant && resteDu(f) > 0 });
+        direResultatEnvoi(r, e.parent || "le parent", f.numero);
+      } catch (err) {
+        if (fenetre) fenetre.close();
+        signalerErreur(err);
+      }
+      setEnvoiEnCours(null);
     };
 
     // Joindre le PDF : le partage système, une fois la conversation ouverte.
     const partager = async () => {
       setEnvoiEnCours(f.id);
       try {
-        const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, lienPaiementValide(f));
+        const texte = makeFactureWhatsApp(e, f.numero, f.nbSeances, f.montant, f.datesSeances, seuil, f.prestation, null, parametres);
         const r = await partagerFacturePDF(f, e, parametres, texte);
         if (r.telecharge) signalerInfo("PDF téléchargé — cet appareil ne sait pas partager de fichier.");
         else if (r.partage) signalerSucces(`Facture ${f.numero} envoyée.`);
@@ -872,7 +868,7 @@ function ModuleFacturation({
           ? bouton("↩️ Rétablir", retablir, C.gold, C.goldPale, C.goldBord)
           : [
               emise && e ? h(React.Fragment, { key: "env" },
-                bouton("💬 WhatsApp", whatsappParent, "#0b6b37", C.whatsappPale, C.whatsappBord)) : null,
+                bouton(occupe ? "…" : "📤 Renvoyer", whatsappParent, "#0b6b37", C.whatsappPale, C.whatsappBord)) : null,
               emise && e ? h(React.Fragment, { key: "pdf" },
                 bouton(occupe ? "…" : "📎 PDF", partager, C.texte, C.surface2, C.bord)) : null,
               e ? h(React.Fragment, { key: "enc" },

@@ -54,16 +54,6 @@ const dejaFacturees = (eid, factures) => {
 
 // Ce qu'il reste à régler sur une facture, une fois les versements déduits.
 const resteDu = f => Math.max(0, Math.round(((f?.montant || 0) - (f?.encaisse || 0)) * 100) / 100);
-// Un lien Stripe vaut pour le montant exact qui lui a donné naissance. Après un
-// acompte en espèces, il réclamerait trop : on ne le propose plus, et le prochain
-// envoi en fabrique un neuf, au bon montant.
-const lienPaiementValide = f => {
-  if (!f || !f.lienPaiement || !f.numero) return null;
-  if (f.statut === "paye" || f.statut === "annulee") return null;
-  const reste = resteDu(f);
-  if (!(reste > 0)) return null;
-  return Math.round(Number(f.lienMontant) * 100) / 100 === reste ? f.lienPaiement : null;
-};
 // Chaque séance renvoyée porte sa matière (un même élève peut suivre plusieurs
 // matières, ex. Maths + Physique) afin que la facture détaille quoi a été suivi.
 // Toute présence de l'élève compte, y compris dans un groupe qu'il a quitté
@@ -91,25 +81,6 @@ const seancesOuvertes = (eid, appels, groupes, depuis) => {
     return { date, matiere: groupeDe(gid)?.matiere || "", groupeId: gid };
   }).sort((a, b) => a.date.localeCompare(b.date));
 };
-// ── Premier cours offert (3.5.2) ──────────────────────────────────────────
-// La séance offerte est la toute première présence de l'élève, tous groupes
-// confondus. Elle figure sur la facture (à 0 €) mais ne se paie pas ; elle compte
-// pour le rythme de facturation, et une fois facturée elle ne revient jamais.
-const premiereSeance = (eid, appels) => Object.entries(appels || {})
-  .filter(([k, p]) => k.startsWith("ap:") && p && p[eid] === "present")
-  .map(([k]) => { const [, gid, date] = k.split(":"); return { gid, date }; })
-  .sort((a, b) => a.date.localeCompare(b.date) || a.gid.localeCompare(b.gid))[0] || null;
-const marquerOfferte = (eleve, dates, appels) => {
-  if (!eleve || !eleve.offert) return dates;
-  const p = premiereSeance(eleve.id, appels);
-  if (!p) return dates;
-  return (dates || []).map(d => d.date === p.date && (!d.groupeId || d.groupeId === p.gid) ? { ...d, offert: true } : d);
-};
-const montantSeances = (eleve, dates) =>
-  parseFloat(((dates || []).filter(d => !d.offert).length * 2 * eleve.th).toFixed(2));
-const seancesOffertes = dates => (dates || []).filter(d => d.offert);
-const seancesPayantes = dates => (dates || []).filter(d => !d.offert);
-
 // Regroupe une liste de séances {date,matiere} par matière, en conservant l'ordre
 // d'apparition — utilisé partout où la facture doit détailler Maths/Physique séparément.
 const groupParMatiere = dates => {
@@ -157,12 +128,12 @@ const lignesFacture = (matieres, montant, thSecours) => {
 const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
-    const dates = marquerOfferte(e, seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures))
-      .filter(d => !estFuture(d.date)), appels);
+    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures))
+      .filter(d => !estFuture(d.date));
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     return dates.length > actuel
-      ? { eid: e.id, dates, montant: montantSeances(e, dates) }
+      ? { eid: e.id, dates, montant: parseFloat((dates.length * 2 * e.th).toFixed(2)) }
       : null;
   })
   .filter(Boolean);

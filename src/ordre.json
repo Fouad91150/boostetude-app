@@ -21,6 +21,7 @@
   "15-module-appel.js",
   "16-modale-facture.js",
   "16b-facture-pdf.js",
+  "16c-envoi-parent.js",
   "17-vue-impression.js",
   "18-module-facturation.js",
   "18b-relances.js",

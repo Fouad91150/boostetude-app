@@ -77,9 +77,9 @@ const api = {
         // et `stageId` dit que cette facture ne suit pas l'appel.
         prestation: p.prestation ?? null,
         stageId: p.stage_id ?? null,
-        // Lien Stripe propre à la facture, et le montant pour lequel il a été créé.
-        lienPaiement: p.stripe_lien_url ?? null,
-        lienMontant: p.stripe_lien_montant == null ? null : Number(p.stripe_lien_montant),
+        stripeUrl: p.stripe_lien_url ?? null,
+        pdfUrl: p.pdf_url ?? null,
+        envoyeeLe: p.envoyee_le ?? null,
         datesSeances: (p.dates_seances ?? []).map(d => typeof d === "string" ? {
           date: d,
           matiere: ""
@@ -109,8 +109,7 @@ const api = {
       parent_tel: form.tel,
       parent_email: form.email,
       notes: form.notes,
-      groupe_id: groupeIds[0] || null,
-      ...(typeof form.offert === "boolean" ? { premier_cours_offert: form.offert } : {})
+      groupe_id: groupeIds[0] || null
     };
     let eleveId = form.id;
     if (eleveId) {
@@ -444,24 +443,6 @@ Object.assign(api, {
       note: e.note || ""
     }));
   },
-  // Paiement par carte : le lien est fabriqué côté serveur (fonction Supabase
-  // « stripe-lien-facture »), seul endroit où vit la clé Stripe. Il porte le
-  // montant exact du reste à payer et ne sert qu'une fois ; le paiement revient
-  // tout seul en versement « Carte » (fonction « stripe-webhook »).
-  async lienPaiement(factureId) {
-    if (!sb.functions) throw new Error("Paiement en ligne indisponible.");
-    const { data, error } = await sb.functions.invoke("stripe-lien-facture", { body: { facture_id: factureId } });
-    if (error) {
-      let message = error.message;
-      try {
-        const corps = await error.context?.json?.();
-        if (corps && corps.erreur) message = corps.erreur;
-      } catch (_) { /* réponse non lisible : on garde le message générique */ }
-      throw new Error(message);
-    }
-    if (!data || !data.url) throw new Error((data && data.erreur) || "Lien de paiement indisponible.");
-    return data;
-  },
   async ajouterEncaissement(factureId, { montant, mode, date, note }) {
     const valeur = Math.round((Number(montant) || 0) * 100) / 100;
     if (!(valeur > 0)) throw new Error("Le montant du versement doit être supérieur à zéro.");
@@ -605,3 +586,33 @@ Object.assign(api, {
     if (error) throw error;
   }
 });
+
+// ─── ENVOI AU PARENT ─────────────────────────────────────────────────────────
+// Deux pièces font de l'envoi un geste unique : le lien de paiement Stripe au
+// montant exact (fonction serveur `stripe-lien-facture`, qui seule détient la
+// clé Stripe) et le PDF déposé en ligne sous un nom imprévisible, que le parent
+// ouvre d'un toucher depuis WhatsApp.
+Object.assign(api, {
+  async lienPaiementStripe(factureId) {
+    const { data, error } = await sb.functions.invoke("stripe-lien-facture", { body: { facture_id: factureId } });
+    if (error) {
+      // Le corps de la réponse porte le message utile (« clé Stripe absente »…).
+      let detail = "";
+      try { detail = (await error.context.json()).erreur || ""; } catch (e) { /* corps illisible */ }
+      throw new Error(detail || error.message || "Lien de paiement indisponible");
+    }
+    if (data && data.erreur) throw new Error(data.erreur);
+    return data && data.url ? data.url : null;
+  },
+  async deposerFacturePDF(facture, eleve, blob) {
+    const alea = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
+    const chemin = `${facture.numero || "brouillon"}-${alea}.pdf`;
+    const { error } = await sb.storage.from("factures").upload(chemin, blob, { contentType: "application/pdf", upsert: false });
+    if (error) throw error;
+    const url = sb.storage.from("factures").getPublicUrl(chemin).data.publicUrl;
+    const { error: e2 } = await sb.from("paiements").update({ pdf_url: url, envoyee_le: new Date().toISOString() }).eq("id", facture.id);
+    if (e2) throw e2;
+    return url;
+  }
+});
+
