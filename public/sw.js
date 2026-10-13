@@ -5,7 +5,10 @@
 // où une ancienne version continuait de s'afficher.
 // Remplacé au build par le numéro de version : chaque version a son propre cache.
 const CACHE = "boostetude-__VERSION__";
-const COQUILLE = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
+// Chemins relatifs à l'emplacement du service worker : l'appli peut vivre à la
+// racine (Netlify) comme sous /boostetude-app/ (GitHub Pages).
+const ICI = p => new URL(p, self.location).href;
+const COQUILLE = ["./", "index.html", "manifest.json", "icon-192.png", "icon-512.png"].map(ICI);
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(COQUILLE)).catch(() => {}).then(() => self.skipWaiting()));
@@ -31,6 +34,6 @@ self.addEventListener("fetch", e => {
         caches.open(CACHE).then(c => c.put(req, copie)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(req).then(m => m || caches.match("/index.html")))
+      .catch(() => caches.match(req).then(m => m || caches.match(ICI("index.html"))))
   );
 });

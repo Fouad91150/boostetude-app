@@ -58,6 +58,16 @@ for (const f of existsSync(join(racine, "public")) ? readdirSync(join(racine, "p
   copyFileSync(join(racine, "public", f), join(racine, "dist", f));
 }
 
+// GitHub Pages publie le dossier docs/ de la branche main (Netlify, lui, publie
+// dist/). Les deux sont identiques ; .nojekyll empêche GitHub de retraiter les
+// fichiers. Les chemins de l'application sont relatifs : elle tourne aussi bien
+// à la racine d'un domaine que sous /boostetude-app/.
+if (!verifier) {
+  mkdirSync(join(racine, "docs"), { recursive: true });
+  for (const f of readdirSync(join(racine, "dist"))) copyFileSync(join(racine, "dist", f), join(racine, "docs", f));
+  writeFileSync(join(racine, "docs", ".nojekyll"), "");
+}
+
 const empreinte = createHash("sha256").update(page).digest("hex");
 console.log(`dist/index.html — ${page.length} caractères`);
 console.log(`sha256          — ${empreinte}`);

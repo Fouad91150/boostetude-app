@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.5.1";
+<script>window.__APP_VERSION = "3.5.2";
 window.__APP_BUILD = "2026-10-13";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
@@ -8064,7 +8064,7 @@ root.render(/*#__PURE__*/React.createElement(App, null));
 // deux fois de suite — une boucle de rechargement serait pire que le mal.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").then(enregistrement => {
+    navigator.serviceWorker.register("sw.js").then(enregistrement => {
       // Au retour sur l'application, demander au navigateur s'il y a du neuf.
       enregistrement.update().catch(() => {});
       document.addEventListener("visibilitychange", () => {

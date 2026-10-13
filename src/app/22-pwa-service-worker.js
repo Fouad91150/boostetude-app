@@ -9,7 +9,7 @@
 // deux fois de suite — une boucle de rechargement serait pire que le mal.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").then(enregistrement => {
+    navigator.serviceWorker.register("sw.js").then(enregistrement => {
       // Au retour sur l'application, demander au navigateur s'il y a du neuf.
       enregistrement.update().catch(() => {});
       document.addEventListener("visibilitychange", () => {

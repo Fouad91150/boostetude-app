@@ -194,3 +194,12 @@ bancaire » : la facture passe seule à « payée » et entre au livre des recet
 
 Plus de chèque dans les messages ni sur le PDF ; Wero se renseigne dans Réglages →
 Entreprise. Code : `src/app/16c-envoi-parent.js`, tests : `tests/envoi-parent.test.js`.
+
+## 3.5.2 — publication par GitHub Pages (13 octobre 2026)
+
+Netlify a suspendu les mises en ligne (crédits du forfait gratuit épuisés). L'appli
+est désormais publiée par **GitHub Pages** : `npm run build` écrit `dist/` **et**
+`docs/` (identiques, plus `docs/.nojekyll`), et GitHub publie `docs/` de la branche
+`main` à l'adresse https://fouad91150.github.io/boostetude-app/.
+Les chemins (manifest, service worker) sont relatifs : la même page tourne à la
+racine d'un domaine comme sous `/boostetude-app/`.
