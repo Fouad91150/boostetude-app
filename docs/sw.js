@@ -4,7 +4,7 @@
 // délibéré : un cache trop zélé rejouerait exactement la panne de septembre,
 // où une ancienne version continuait de s'afficher.
 // Remplacé au build par le numéro de version : chaque version a son propre cache.
-const CACHE = "boostetude-3.5.3";
+const CACHE = "boostetude-3.5.4";
 // Chemins relatifs à l'emplacement du service worker : l'appli peut vivre à la
 // racine (Netlify) comme sous /boostetude-app/ (GitHub Pages).
 const ICI = p => new URL(p, self.location).href;

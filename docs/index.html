@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.5.3";
+<script>window.__APP_VERSION = "3.5.4";
 window.__APP_BUILD = "2026-10-13";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
@@ -1240,9 +1240,9 @@ const SEUIL_FACTURATION_DEFAUT = 3;
 // Trois moyens acceptés. Pour un virement, le nom de l'enfant est indispensable :
 // sans lui, un virement arrive sans qu'on sache à qui le rattacher.
 // Moyens de règlement 2026-2027 : carte en ligne (Stripe), Wero, virement,
-// espèces — plus de chèque. Wero n'est cité que s'il est renseigné dans Réglages.
+// espèces — plus de chèque. Wero toujours cité ; son numéro s'ajoute s'il est renseigné dans Réglages.
 const MOYENS_PAIEMENT_TEXTE = (e, p) =>
-  `Règlement au choix : ${p && p.wero ? `Wero (${p.wero}), ` : ""}virement bancaire ou espèces au cours. ` +
+  `Règlement au choix : Wero${p && p.wero ? ` (${p.wero})` : ""}, virement bancaire ou espèces au cours. ` +
   `Pour un virement, merci d'indiquer « ${e.prenom} ${e.nom} » en référence.`;
 
 // Les deux liens qui font de l'envoi un seul geste : la facture PDF (un lien,

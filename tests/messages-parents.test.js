@@ -24,10 +24,10 @@ describe("Moyens de paiement", () => {
     assert.doesNotMatch(t, /chèque/);
   });
 
-  test("Wero apparaît quand il est renseigné", () => {
+  test("Wero est toujours proposé, avec son numéro s'il est renseigné", () => {
     const { MOYENS_PAIEMENT_TEXTE } = chargerApp();
-    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, { wero: "07 44 94 45 02" }), /Wero \(07 44 94 45 02\)/);
-    assert.doesNotMatch(MOYENS_PAIEMENT_TEXTE(eleveType, {}), /Wero/);
+    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, { wero: "07 44 94 45 02" }), /Wero \(07 44 94 45 02\), virement/);
+    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, {}), /Wero, virement bancaire ou espèces/);
   });
 
   test("le nom de l'enfant sert de référence au virement", () => {
