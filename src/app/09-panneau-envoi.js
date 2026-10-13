@@ -89,6 +89,25 @@ function PanneauEnvoi({
     } catch (e) {}
   };
 
+  // Le geste unique (3.5.3) : facture émise → un bouton qui ouvre WhatsApp chez
+  // le parent avec le lien du PDF ET le lien de paiement au montant restant.
+  // Les canaux plus bas restent en secours, mais ils ne portent que du texte.
+  const [envoiUnique, setEnvoiUnique] = useState(false);
+  const unGeste = (isF || type === "rappel") && facture && facture.numero && facture.statut !== "annulee";
+  const envoyerUnGeste = async () => {
+    if (!tel) { signalerErreur({ message: `Pas de téléphone parent pour ${eleve.prenom} : ajoutez-le dans sa fiche.` }); return; }
+    const fenetre = reserverFenetre(tel);
+    setEnvoiUnique(true);
+    try {
+      const r = await envoyerAuParent({ facture, eleve, parametres, seuil, fenetre, relance: type === "rappel" || (Number(facture.encaisse) || 0) > 0 });
+      direResultatEnvoi(r, eleve.parent || "le parent", facture.numero);
+    } catch (e) {
+      if (fenetre) fenetre.close();
+      signalerErreur(e);
+    }
+    setEnvoiUnique(false);
+  };
+
   const partagerPDF = async () => {
     setEnvoiPDF(true);
     try {
@@ -151,6 +170,18 @@ function PanneauEnvoi({
     }
   },
     h(Lbl, { text: isF ? "📤 Envoyer la facture" : isA ? "✉️ Prévenir le parent" : isAl ? "🚨 Alerter le parent" : "📨 Rappel paiement" }),
+
+    unGeste && h("button", {
+      onClick: envoyerUnGeste,
+      disabled: envoiUnique,
+      style: {
+        width: "100%", background: "#0b6b37", border: "1px solid #0b6b37", borderRadius: 10,
+        padding: "13px 10px", color: "#fff", fontSize: 14.5, fontWeight: 700, marginBottom: 6,
+        cursor: envoiUnique ? "wait" : "pointer", fontFamily: "inherit", opacity: envoiUnique ? 0.6 : 1
+      }
+    }, envoiUnique ? "Préparation…" : (type === "rappel" ? "📤 Relancer sur WhatsApp — PDF + paiement en ligne" : "📤 Envoyer sur WhatsApp — PDF + paiement en ligne")),
+    unGeste && h("div", { style: { fontSize: 11, color: C.gray, textAlign: "center", marginBottom: 10 } },
+      "Autres moyens ci-dessous (texte seul, sans liens)"),
 
     // ── Le fichier : un geste à part, le seul qui emporte vraiment la facture ──
     pdfPossible && h("div", { style: { display: "flex", gap: 6, marginBottom: 10 } },

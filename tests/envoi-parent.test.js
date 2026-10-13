@@ -60,3 +60,24 @@ describe("Envoi au parent en un geste", () => {
     assert.match(texte, /buy\.stripe\.com/);
   });
 });
+
+describe("Le bouton unique sur la carte de l'élève", () => {
+  test("une facture émise affiche « Envoyer sur WhatsApp — PDF + paiement en ligne »", async () => {
+    const React = (await import("react")).default;
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { PanneauEnvoi } = chargerApp();
+    const html = renderToStaticMarkup(React.createElement(PanneauEnvoi, {
+      eleve: ELEVE, mois: "F2026-0007", nb: 3, montant: 90, dates: FACTURE.datesSeances,
+      type: "facture", facture: FACTURE, parametres: parametresComplets, seuil: 3 }));
+    assert.ok(html.includes("PDF + paiement en ligne"));
+  });
+  test("un brouillon ne l'affiche pas", async () => {
+    const React = (await import("react")).default;
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { PanneauEnvoi } = chargerApp();
+    const html = renderToStaticMarkup(React.createElement(PanneauEnvoi, {
+      eleve: ELEVE, mois: "depuis…", nb: 3, montant: 90, dates: FACTURE.datesSeances,
+      type: "facture", facture: { ...FACTURE, numero: null }, parametres: parametresComplets, seuil: 3 }));
+    assert.ok(!html.includes("PDF + paiement en ligne"));
+  });
+});
