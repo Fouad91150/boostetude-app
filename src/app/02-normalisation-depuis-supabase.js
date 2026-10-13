@@ -1,8 +1,10 @@
 // ─── NORMALISATION DEPUIS SUPABASE ───────────────────────────
 const normalizeEleveDB = x => ({
   id: x.id,
-  prenom: x.prenom,
-  nom: x.nom,
+  // Espaces parasites retirés à la lecture : « Ilyes  Nassi » s'affichait avec
+  // deux espaces dans les messages aux parents.
+  prenom: (x.prenom || "").replace(/\s+/g, " ").trim(),
+  nom: (x.nom || "").replace(/\s+/g, " ").trim(),
   niveau: x.niveau,
   th: TARIFS_H[x.niveau] ?? 12.5,
   mp: x.mode_paiement ?? "Virement",

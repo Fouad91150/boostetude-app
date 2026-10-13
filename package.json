@@ -1,6 +1,6 @@
 {
   "name": "boostetude-app",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "private": true,
   "type": "module",
   "description": "Application de gestion Boost'Étude — élèves, appel, suivi de séance, bilans aux parents, facturation.",

@@ -59,7 +59,9 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
   const lignes = prestation ? "" : detail.length > 1
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
     : "";
-  return `*Boost'Étude — Facture ${mois}*\n\n` +
+  // Titre sans gras sur toute la ligne : WhatsApp affichait un « * » orphelin
+  // (capture du 13/10). Le gras ne porte que sur le numéro.
+  return `🧾 *Facture ${mois}* — Boost'Étude\n\n` +
          `Bonjour ${e.parent},\n\n` +
          `Voici la facture de ${e.prenom} :\n` +
          lignes +
@@ -99,7 +101,7 @@ const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse, liens, p) => 
   const lignes = detail.length > 1
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
     : "";
-  return `*Boost'Étude — Rappel ${reference || ""}*`.trim() + "\n\n" +
+  return (reference ? `🔔 *Rappel facture ${reference}* — Boost'Étude` : `🔔 Rappel — Boost'Étude`) + "\n\n" +
          `Bonjour ${e.parent},\n\n` +
          `Un petit rappel au sujet de la facture de ${e.prenom} :\n` +
          lignes +

@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.5.0";
+<script>window.__APP_VERSION = "3.5.1";
 window.__APP_BUILD = "2026-10-13";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
@@ -173,8 +173,10 @@ const lastMonths = n => {
 // ─── NORMALISATION DEPUIS SUPABASE ───────────────────────────
 const normalizeEleveDB = x => ({
   id: x.id,
-  prenom: x.prenom,
-  nom: x.nom,
+  // Espaces parasites retirés à la lecture : « Ilyes  Nassi » s'affichait avec
+  // deux espaces dans les messages aux parents.
+  prenom: (x.prenom || "").replace(/\s+/g, " ").trim(),
+  nom: (x.nom || "").replace(/\s+/g, " ").trim(),
   niveau: x.niveau,
   th: TARIFS_H[x.niveau] ?? 12.5,
   mp: x.mode_paiement ?? "Virement",
@@ -1285,7 +1287,9 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
   const lignes = prestation ? "" : detail.length > 1
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
     : "";
-  return `*Boost'Étude — Facture ${mois}*\n\n` +
+  // Titre sans gras sur toute la ligne : WhatsApp affichait un « * » orphelin
+  // (capture du 13/10). Le gras ne porte que sur le numéro.
+  return `🧾 *Facture ${mois}* — Boost'Étude\n\n` +
          `Bonjour ${e.parent},\n\n` +
          `Voici la facture de ${e.prenom} :\n` +
          lignes +
@@ -1325,7 +1329,7 @@ const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse, liens, p) => 
   const lignes = detail.length > 1
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
     : "";
-  return `*Boost'Étude — Rappel ${reference || ""}*`.trim() + "\n\n" +
+  return (reference ? `🔔 *Rappel facture ${reference}* — Boost'Étude` : `🔔 Rappel — Boost'Étude`) + "\n\n" +
          `Bonjour ${e.parent},\n\n` +
          `Un petit rappel au sujet de la facture de ${e.prenom} :\n` +
          lignes +
