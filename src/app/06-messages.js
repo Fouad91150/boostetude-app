@@ -67,7 +67,10 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
          lignes +
          (prestation
            ? `• ${prestation}\n`
-           : `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n`) +
+           : `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n` +
+             ((dates || []).some(d => d.offert)
+               ? `• dont ${(dates || []).filter(d => d.offert).length === 1 ? "1 première séance offerte" : (dates || []).filter(d => d.offert).length + " premières séances offertes (une par matière)"} 🎁\n`
+               : "")) +
          `• *Total : ${montantTxt(total)}*\n\n` +
          blocLiens(liens) +
          `${liens && liens.stripeUrl ? "Ou bien : " + MOYENS_PAIEMENT_TEXTE(e, p).replace(/^Règlement au choix : /, "") : MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +

@@ -21,7 +21,7 @@ function ModaleFacture({
   onClose
 }) {
   const nb = dates.length;
-  const total = existante ? Number(existante.montant) || 0 : parseFloat((nb * 2 * eleve.th).toFixed(2));
+  const total = existante ? Number(existante.montant) || 0 : montantSeances(dates, eleve.th);
   const verses = (encaissements || []).reduce((s, e) => s + e.montant, 0);
   const reste = Math.max(0, Math.round((total - verses) * 100) / 100);
 

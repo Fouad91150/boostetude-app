@@ -13,7 +13,9 @@ const normalizeEleveDB = x => ({
   tel: x.parent_tel ?? "",
   parent: x.parent_nom ?? `Parent de ${x.prenom}`,
   notes: x.notes ?? "",
-  groupe_id: x.groupe_id ?? null
+  groupe_id: x.groupe_id ?? null,
+  // Nouvel élève : sa première séance de chaque matière n'est pas facturée.
+  premierCoursOffert: x.premier_cours_offert === true
 });
 // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : l'appartenance
 // à un groupe passe par la table de liaison eleves_groupes (many-to-many). La colonne

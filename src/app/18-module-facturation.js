@@ -357,9 +357,9 @@ function ModuleFacturation({
     }
   }, actifs.map(e => {
     const f = ouverteDe(e.id);
-    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures));
+    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures), e.premierCoursOffert);
     const nb = dates.length;
-    const montant = f ? f.montant : parseFloat((nb * 2 * e.th).toFixed(2));
+    const montant = f ? f.montant : montantSeances(dates, e.th);
     return /*#__PURE__*/React.createElement("div", {
       key: e.id,
       style: {

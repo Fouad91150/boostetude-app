@@ -58,7 +58,21 @@ const resteDu = f => Math.max(0, Math.round(((f?.montant || 0) - (f?.encaisse ||
 // matières, ex. Maths + Physique) afin que la facture détaille quoi a été suivi.
 // Toute présence de l'élève compte, y compris dans un groupe qu'il a quitté
 // depuis : sinon un changement de groupe effaçait ses séances non facturées.
-const seancesOuvertes = (eid, appels, groupes, depuis) => {
+// `offert` (premier cours offert, propre à l'élève) : la toute première séance
+// de l'élève DANS CHAQUE MATIÈRE est marquée `offert: true` et ne se facture pas.
+// Un élève qui commence maths et physique a donc deux séances offertes.
+const premieresParMatiere = (eid, appels, groupes) => {
+  const groupeDe = id => (groupes || []).find(g => g.id === id);
+  const premiere = {};
+  Object.entries(appels || {}).forEach(([k, p]) => {
+    const [tag, gid, date] = k.split(":");
+    if (tag !== "ap" || !p || p[eid] !== "present" || estFuture(date)) return;
+    const m = groupeDe(gid)?.matiere || "";
+    if (!premiere[m] || date < premiere[m].date) premiere[m] = { date, gid };
+  });
+  return premiere;
+};
+const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
   const groupeDe = id => (groupes || []).find(g => g.id === id);
   const matieresActuelles = new Set((groupes || []).filter(g => (g.eids || []).includes(eid)).map(g => g.matiere || ""));
   const dejaVue = (date, g, gid) => {
@@ -79,20 +93,31 @@ const seancesOuvertes = (eid, appels, groupes, depuis) => {
   }).map(([k]) => {
     const [, gid, date] = k.split(":");
     return { date, matiere: groupeDe(gid)?.matiere || "", groupeId: gid };
-  }).sort((a, b) => a.date.localeCompare(b.date));
+  }).sort((a, b) => a.date.localeCompare(b.date))
+    .map((s, _, tout) => {
+      if (!offert) return s;
+      const p = premieresParMatiere(eid, appels, groupes)[s.matiere];
+      return p && p.date === s.date && p.gid === s.groupeId ? { ...s, offert: true } : s;
+    });
 };
+
+// Montant d'une liste de séances : les séances offertes ne se paient pas.
+const montantSeances = (dates, th) =>
+  parseFloat(((dates || []).filter(d => !d.offert).length * 2 * (Number(th) || 0)).toFixed(2));
 // Regroupe une liste de séances {date,matiere} par matière, en conservant l'ordre
 // d'apparition — utilisé partout où la facture doit détailler Maths/Physique séparément.
 const groupParMatiere = dates => {
   const map = new Map();
   (dates || []).forEach(d => {
     const mat = d.matiere || "Cours";
-    if (!map.has(mat)) map.set(mat, []);
-    map.get(mat).push(d.date);
+    if (!map.has(mat)) map.set(mat, { dates: [], offertes: [] });
+    map.get(mat).dates.push(d.date);
+    if (d.offert) map.get(mat).offertes.push(d.date);
   });
-  return Array.from(map, ([matiere, dates]) => ({
+  return Array.from(map, ([matiere, v]) => ({
     matiere,
-    dates
+    dates: v.dates,
+    offertes: v.offertes
   }));
 };
 const horaireLabel = g => {
@@ -106,12 +131,13 @@ const horaireLabel = g => {
 // ajoutée après coup, faisait imprimer « 120,00 € » au-dessus d'un « NET À PAYER
 // 100,00 € ». La dernière ligne absorbe l'arrondi pour que la somme tombe juste.
 const lignesFacture = (matieres, montant, thSecours) => {
-  const heures = (matieres || []).reduce((s, g) => s + g.dates.length * 2, 0);
+  const payees = g => g.dates.length - ((g.offertes || []).length);
+  const heures = (matieres || []).reduce((s, g) => s + payees(g) * 2, 0);
   const m = Number(montant) || 0;
   const th = heures > 0 && m > 0 ? Math.round((m / heures) * 100) / 100 : (Number(thSecours) || 0);
   let cumul = 0;
   return (matieres || []).map((g, i, tout) => {
-    const h = g.dates.length * 2;
+    const h = payees(g) * 2;
     const total = i === tout.length - 1 && heures > 0 && m > 0
       ? Math.round((m - cumul) * 100) / 100
       : Math.round(h * th * 100) / 100;
@@ -128,13 +154,16 @@ const lignesFacture = (matieres, montant, thSecours) => {
 const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
-    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures))
+    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
       .filter(d => !estFuture(d.date));
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
-    return dates.length > actuel
-      ? { eid: e.id, dates, montant: parseFloat((dates.length * 2 * e.th).toFixed(2)) }
-      : null;
+    const montant = montantSeances(dates, e.th);
+    // Ajout de séances, ou même nombre de séances mais montant à corriger
+    // (cours offert pas encore déduit). Jamais de séance retirée.
+    const aCorriger = brouillon && dates.length === actuel && Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004
+      && !(Number(brouillon.encaisse) > 0);
+    return dates.length > actuel || aCorriger ? { eid: e.id, dates, montant } : null;
   })
   .filter(Boolean);
 

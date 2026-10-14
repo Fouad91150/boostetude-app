@@ -28,6 +28,8 @@ function FormulaireEleve({
   const [tel, setTel] = useState(def.tel);
   const [parent, setParent] = useState(def.parent);
   const [notes, setNotes] = useState(def.notes);
+  // Nouvel élève : coché d'office (sa 1re séance de chaque matière est offerte).
+  const [offert, setOffert] = useState(initial?.id ? initial.premierCoursOffert === true : true);
   const [saving, setSaving] = useState(false);
   const th = TARIFS_H[niveau] ?? 12.5;
   const toggleGroupe = gid => setGroupeIds(ids => ids.includes(gid) ? ids.filter(x => x !== gid) : [...ids, gid]);
@@ -44,6 +46,7 @@ function FormulaireEleve({
         tel,
         parent,
         notes,
+        premierCoursOffert: offert,
         groupeIds
       });
     } finally {
@@ -106,7 +109,13 @@ function FormulaireEleve({
       color: C.gold,
       fontFamily: FD
     }
-  }, euros(th), "/h")), /*#__PURE__*/React.createElement(Lbl, {
+  }, euros(th), "/h")), h("label", {
+    style: { display: "flex", alignItems: "center", gap: 10, background: C.greenPale, border: `1px solid ${C.greenBord}`,
+      borderRadius: 10, padding: "10px 12px", marginBottom: 14, cursor: "pointer", fontSize: 13.5, color: C.texte }
+  }, h("input", { type: "checkbox", checked: offert, onChange: e => setOffert(e.target.checked),
+      style: { width: 20, height: 20, accentColor: C.green } }),
+    h("span", null, "🎁 ", h("b", null, "Premier cours offert"), " — la 1re séance de chaque matière n'est pas facturée")),
+  /*#__PURE__*/React.createElement(Lbl, {
     text: "Groupes suivis (matières)"
   }), /*#__PURE__*/React.createElement("div", {
     style: {

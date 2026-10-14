@@ -174,10 +174,11 @@ function VueImpression({
                     h("td", { style: { padding: "12px" } },
                       h("div", { style: { fontWeight: 600, color: "#222" } }, `${g.matiere || "Cours"} — ${eleve.niveau}`),
                       h("div", { style: { fontSize: 11, color: "#888", marginTop: 2 } },
-                        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`),
+                        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
+                        ((g.offertes || []).length ? ` · 1re séance offerte (${(g.offertes || []).map(d => fmtDateCourt(d)).join(", ")}) 🎁` : "")),
                       h("div", { style: { fontSize: 11, color: "#999", marginTop: 4, lineHeight: 1.6 } },
                         g.dates.map(d => fmtDateCourt(d)).join(" · "))),
-                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${g.dates.length * 2} h`),
+                    h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${g.heures} h`),
                     h("td", { style: { padding: "12px", textAlign: "right", color: "#444" } }, `${euros(g.th)}/h`),
                     h("td", { style: { padding: "12px", textAlign: "right", fontWeight: 700, color: C.navy } }, euros(total)));
                 })

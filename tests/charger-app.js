@@ -60,7 +60,7 @@ export function chargerApp() {
     return { VueImpression, ModuleReglages, OngletEntreprise, OngletLivreRecettes, OngletDonnees,
              BlocConformite, champsManquants, versCSV, ModuleFacturation, ModuleAppel, App, api, C,
              ModuleSuivi, CarteSuiviEleve,
-             envoyerAuParent, preparerLiens, toutLire, dejaFacturees, brouillonsEnRetard, lignesFacture, lignesRecettes, estFuture, jourDeLaDate,
+             envoyerAuParent, preparerLiens, montantSeances, premieresParMatiere, toutLire, dejaFacturees, brouillonsEnRetard, lignesFacture, lignesRecettes, estFuture, jourDeLaDate,
              lundiDe, addJours, isoSemaine, libelleSemaine, telWhatsApp, splitNotions,
              estCompteRenduVide,
              phrase,

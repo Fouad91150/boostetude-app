@@ -109,7 +109,8 @@ const api = {
       parent_tel: form.tel,
       parent_email: form.email,
       notes: form.notes,
-      groupe_id: groupeIds[0] || null
+      groupe_id: groupeIds[0] || null,
+      ...(typeof form.premierCoursOffert === "boolean" ? { premier_cours_offert: form.premierCoursOffert } : {})
     };
     let eleveId = form.id;
     if (eleveId) {

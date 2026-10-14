@@ -272,11 +272,12 @@ function construireFacturePDF(facture, eleve, parametres) {
       page.texte(M + 10, y + 4, `${g.matiere || "Cours"} — ${eleve.niveau}`, { taille: 10, gras: true, couleur: NOIR });
       page.texte(M + 10, y + 16,
         `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
+        ((g.offertes || []).length ? ` · 1re séance offerte (${(g.offertes || []).map(d => fmtDateCourt(d)).join(", ")})` : "") +
         (eleve.remise > 0 && Math.abs(g.th - eleve.th) < 0.005 ? ` · remise de ${euros(eleve.remise)}/h (${(eleve.motifsRemise || ["inscriptions multiples"]).join(" + ")})` : ""),
         { taille: 8, couleur: GRIS });
       const finDates = page.paragraphe(M + 10, y + 27, g.dates.map(d => fmtDateCourt(d)).join(" · "),
         COL_QTE - M - 30, { taille: 8, couleur: GRIS_PALE, interligne: 1.3 });
-      page.texte(COL_QTE, y + 4, `${g.dates.length * 2} h`, { taille: 9.5, couleur: GRIS, align: "droite" });
+      page.texte(COL_QTE, y + 4, `${g.heures} h`, { taille: 9.5, couleur: GRIS, align: "droite" });
       page.texte(COL_TARIF, y + 4, `${euros(g.th)}/h`, { taille: 9.5, couleur: GRIS, align: "droite" });
       page.texte(DROITE - 10, y + 4, euros(total), { taille: 10, gras: true, couleur: NAVY_PDF, align: "droite" });
       y = Math.max(finDates, y + 34) + 6;

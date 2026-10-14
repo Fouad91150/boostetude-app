@@ -172,8 +172,8 @@ function App() {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
-        const dates = seancesOuvertes(eid, ap, gr, depuis);
-        const montant = parseFloat((dates.length * 2 * ele.th).toFixed(2));
+        const dates = seancesOuvertes(eid, ap, gr, depuis, ele.premierCoursOffert);
+        const montant = montantSeances(dates, ele.th);
         await api.syncFacture(eid, dates, montant);
       }
     }
