@@ -47,7 +47,10 @@ function FicheEleve({
     }
   }, eleve.niveau, " • ", euros(eleve.th), "/h • ", groupeNom))), [{
     t: "💰 Facturation",
-    rows: [["Tarif horaire", `${eleve.th} €`], ["Séance de 2 h", `${eleve.th * 2} €`], ["Mode de règlement", eleve.mp]]
+    rows: [
+      ...(eleve.remise > 0 ? [["Tarif normal", euros(eleve.thBase) + "/h"],
+        ["Remise", `− ${euros(eleve.remise)}/h (${(eleve.motifsRemise || []).join(" + ")})`]] : []),
+      ["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)], ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
     rows: [["Nom", eleve.parent || "—"], ["Tél", eleve.tel || "—"], ["Email", eleve.email || "—"]]

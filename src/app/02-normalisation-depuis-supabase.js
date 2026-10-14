@@ -46,32 +46,51 @@ const cleFoyer = e => {
   return mail ? "m:" + mail : "";
 };
 
-// Une inscription = un élève dans une matière. Un élève qui suit maths et physique
-// en compte deux, exactement comme deux frères qui suivent les maths.
+// Les matières distinctes d'un élève (deux créneaux de maths = une matière).
+const matieresEleve = (e, groupes) => new Set((groupes || [])
+  .filter(g => (g.eids || []).includes(e.id))
+  .map(g => g.matiere || "Cours"));
+
+// Compte, par foyer, les inscriptions (élève × matière) et les enfants actifs.
 const compterInscriptions = (eleves, groupes) => {
   const par = {};
   (eleves || []).forEach(e => {
     if (e.actif === false) return;
     const k = cleFoyer(e);
     if (!k) return;
-    const matieres = new Set((groupes || [])
-      .filter(g => (g.eids || []).includes(e.id))
-      .map(g => g.matiere || "Cours"));
-    par[k] = (par[k] || 0) + Math.max(1, matieres.size);
+    par[k] = (par[k] || 0) + Math.max(1, matieresEleve(e, groupes).size);
+  });
+  return par;
+};
+const compterEnfants = eleves => {
+  const par = {};
+  (eleves || []).forEach(e => {
+    if (e.actif === false) return;
+    const k = cleFoyer(e);
+    if (k) par[k] = (par[k] || 0) + 1;
   });
   return par;
 };
 
-// À partir de deux inscriptions dans le même foyer, chacune bénéficie de la remise.
+// Deux remises cumulables, chacune de `remise` €/h (2,50 € par défaut), décidées
+// par Fouad le 14/10/2026 :
+//  · deux matières (maths + physique) : remise sur TOUTES les heures de l'élève ;
+//  · fratrie : dès deux enfants actifs du même foyer, chacun a la remise.
+// Un enfant d'une fratrie qui suit deux matières cumule les deux (5 €/h).
 const appliquerRemiseMulti = (eleves, groupes, remise) => {
   const valeur = Number(remise) || 0;
   if (!(valeur > 0)) return eleves;
-  const par = compterInscriptions(eleves, groupes);
+  const inscriptions = compterInscriptions(eleves, groupes);
+  const enfants = compterEnfants(eleves);
   return (eleves || []).map(e => {
+    const deuxMatieres = matieresEleve(e, groupes).size >= 2;
     const k = cleFoyer(e);
-    const n = k ? (par[k] || 0) : 0;
-    if (n < 2) return e;
-    const reduit = Math.max(0, Math.round((e.th - valeur) * 100) / 100);
-    return { ...e, th: reduit, thBase: e.th, remise: valeur, inscriptionsFoyer: n };
+    const fratrie = e.actif !== false && !!k && (enfants[k] || 0) >= 2;
+    const motifs = [deuxMatieres && "deux matières", fratrie && "fratrie"].filter(Boolean);
+    if (!motifs.length) return e;
+    const total = Math.round(valeur * motifs.length * 100) / 100;
+    const reduit = Math.max(0, Math.round((e.th - total) * 100) / 100);
+    return { ...e, th: reduit, thBase: e.th, remise: total, motifsRemise: motifs,
+             inscriptionsFoyer: k ? (inscriptions[k] || 0) : matieresEleve(e, groupes).size };
   });
 };

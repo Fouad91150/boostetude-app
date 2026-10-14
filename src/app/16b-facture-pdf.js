@@ -272,7 +272,7 @@ function construireFacturePDF(facture, eleve, parametres) {
       page.texte(M + 10, y + 4, `${g.matiere || "Cours"} — ${eleve.niveau}`, { taille: 10, gras: true, couleur: NOIR });
       page.texte(M + 10, y + 16,
         `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
-        (eleve.remise > 0 && Math.abs(g.th - eleve.th) < 0.005 ? ` · remise de ${euros(eleve.remise)}/h (inscriptions multiples)` : ""),
+        (eleve.remise > 0 && Math.abs(g.th - eleve.th) < 0.005 ? ` · remise de ${euros(eleve.remise)}/h (${(eleve.motifsRemise || ["inscriptions multiples"]).join(" + ")})` : ""),
         { taille: 8, couleur: GRIS });
       const finDates = page.paragraphe(M + 10, y + 27, g.dates.map(d => fmtDateCourt(d)).join(" · "),
         COL_QTE - M - 30, { taille: 8, couleur: GRIS_PALE, interligne: 1.3 });

@@ -223,11 +223,42 @@ describe("Remise d'engagement multiple", () => {
     assert.equal(appliquerRemiseMulti(eleves, [G("g1", ["e1", "e2"], "Maths")], 2.5)[0].th, 0);
   });
 
+  test("fratrie + deux matières : les remises se cumulent (5 €/h)", () => {
+    // Deux enfants, l'aîné en maths + physique, le cadet en maths seulement.
+    const { appliquerRemiseMulti } = chargerApp();
+    const eleves = [
+      { ...eleveType, id: "e1", prenom: "Aîné", th: 15, tel: "0600000001", actif: true },
+      { ...eleveType, id: "e2", prenom: "Cadet", th: 12.5, tel: "0600000001", actif: true }
+    ];
+    const r = appliquerRemiseMulti(eleves, [
+      G("g1", ["e1"], "Mathématiques"), G("g2", ["e1"], "Physique-Chimie"), G("g3", ["e2"], "Mathématiques")
+    ], 2.5);
+    assert.equal(r[0].th, 10, "15 − 2,50 (deux matières) − 2,50 (fratrie)");
+    assert.equal(r[0].remise, 5);
+    assert.deepEqual(r[0].motifsRemise, ["deux matières", "fratrie"]);
+    assert.equal(r[1].th, 10, "12,50 − 2,50 (fratrie)");
+    assert.deepEqual(r[1].motifsRemise, ["fratrie"]);
+  });
+
+  test("deux enfants en maths + physique : 5 €/h chacun", () => {
+    const { appliquerRemiseMulti } = chargerApp();
+    const eleves = [
+      { ...eleveType, id: "e1", th: 15, tel: "0600000001", actif: true },
+      { ...eleveType, id: "e2", th: 15, tel: "0600000001", actif: true }
+    ];
+    const r = appliquerRemiseMulti(eleves, [
+      G("g1", ["e1", "e2"], "Mathématiques"), G("g2", ["e1", "e2"], "Physique-Chimie")
+    ], 2.5);
+    assert.equal(r[0].th, 10);
+    assert.equal(r[1].th, 10);
+  });
+
   test("la facture dit d'où vient le prix", () => {
     const { construireFacturePDF } = chargerApp();
     const brut = Buffer.from(construireFacturePDF(
       factureType({ numero: "F2026-0005", dateEmission: "2026-10-05", nbSeances: 4, montant: 80 }),
-      { ...eleveType, th: 10, thBase: 12.5, remise: 2.5 }, parametresComplets)).toString("latin1");
+      { ...eleveType, th: 10, thBase: 12.5, remise: 2.5, motifsRemise: ["deux matières"] }, parametresComplets)).toString("latin1");
     assert.match(brut, /remise de 2,50/);
+    assert.match(brut, /deux mati/);
   });
 });
