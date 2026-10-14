@@ -52,12 +52,24 @@ describe("Rattrapage des appels des collègues", () => {
   });
 
   test("un brouillon à jour n'est pas touché", () => {
-    const brouillon = factureType({ id: "b", eleveId: "e1", nbSeances: 1, montant: 30 });
+    const brouillon = factureType({ id: "b", eleveId: "e1", nbSeances: 1, montant: 30,
+      datesSeances: [{ date: "2026-10-07", matiere: "Mathématiques", groupeId: "gm" }] });
     assert.equal(app.brouillonsEnRetard([eleve], [MATHS], present("ap:gm:2026-10-07"), [brouillon]).length, 0);
   });
 
-  test("jamais de retrait : un brouillon plus fourni que l'appel reste tel quel", () => {
-    const brouillon = factureType({ id: "b", eleveId: "e1", nbSeances: 5, montant: 150 });
+  test("une séance retirée de l'appel quitte aussi le brouillon (inscription par erreur)", () => {
+    // Maroua, 14/10 : physique du 03/10 retirée de l'appel, restée sur son brouillon.
+    const brouillon = factureType({ id: "b", eleveId: "e1", nbSeances: 2, montant: 60, datesSeances: [
+      { date: "2026-10-03", matiere: "Physique-Chimie", groupeId: "gp" },
+      { date: "2026-10-07", matiere: "Mathématiques", groupeId: "gm" }] });
+    const r = app.brouillonsEnRetard([eleve], [MATHS, PHYS], present("ap:gm:2026-10-07"), [brouillon]);
+    assert.equal(r.length, 1);
+    assert.deepEqual(r[0].dates.map(d => d.date), ["2026-10-07"]);
+    assert.equal(r[0].montant, 30);
+  });
+
+  test("un brouillon qui a déjà reçu de l'argent n'est jamais réduit", () => {
+    const brouillon = factureType({ id: "b", eleveId: "e1", nbSeances: 5, montant: 150, encaisse: 30 });
     assert.equal(app.brouillonsEnRetard([eleve], [MATHS], present("ap:gm:2026-10-07"), [brouillon]).length, 0);
   });
 });

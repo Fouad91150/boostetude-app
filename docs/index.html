@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.7.0";
+<script>window.__APP_VERSION = "3.7.1";
 window.__APP_BUILD = "2026-10-14";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
@@ -1269,11 +1269,17 @@ const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     const montant = montantSeances(dates, e.th);
-    // Ajout de séances, ou même nombre de séances mais montant à corriger
-    // (cours offert pas encore déduit). Jamais de séance retirée.
-    const aCorriger = brouillon && dates.length === actuel && Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004
-      && !(Number(brouillon.encaisse) > 0);
-    return dates.length > actuel || aCorriger ? { eid: e.id, dates, montant } : null;
+    // Le brouillon est réaligné sur l'appel dès qu'il en diffère : séance ajoutée,
+    // séance retirée de l'appel (élève inscrit par erreur dans un groupe), cours
+    // offert pas encore déduit. Un brouillon qui a déjà reçu de l'argent n'est
+    // pas touché : il se corrige à la main.
+    const cle = d => `${d.date}|${d.matiere || ""}|${d.offert ? 1 : 0}`;
+    const differe = brouillon && (
+      [...(brouillon.datesSeances || [])].map(cle).sort().join() !== dates.map(cle).sort().join()
+      || Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004);
+    if (brouillon && Number(brouillon.encaisse) > 0) return dates.length > actuel ? { eid: e.id, dates, montant } : null;
+    if (!brouillon) return dates.length ? { eid: e.id, dates, montant } : null;
+    return differe ? { eid: e.id, dates, montant } : null;
   })
   .filter(Boolean);
 
@@ -7665,7 +7671,10 @@ function App() {
     } = await api.fetchAll(role === "admin");
     const grp = gr.find(g => g.id === groupeId);
     if (grp && role === "admin") {
-      for (const eid of grp.eids || []) {
+      // Les élèves du groupe ET ceux qui figuraient sur la feuille : un élève
+      // retiré du groupe garde sinon, sur son brouillon, une séance qu'il n'a
+      // pas suivie (cas de Maroua, 14/10).
+      for (const eid of new Set([...(grp.eids || []), ...Object.keys(presMap || {})])) {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
