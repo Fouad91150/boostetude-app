@@ -1,0 +1,1082 @@
+/* ------------------------------------------------------------------
+   Appel & suivi — feuille de style
+   Conçue en priorité pour le téléphone (l'appel se fait en classe).
+   ------------------------------------------------------------------ */
+
+/* ---------------- Polices (hébergées ici, licence SIL OFL) ---------------- */
+@font-face{font-family:"Alegreya Sans";font-style:normal;font-weight:400;font-display:swap;
+  src:url(polices/alegreya-sans-latin-400-normal.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Alegreya Sans";font-style:normal;font-weight:400;font-display:swap;
+  src:url(polices/alegreya-sans-latin-ext-400-normal.woff2) format("woff2");
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Alegreya Sans";font-style:normal;font-weight:500;font-display:swap;
+  src:url(polices/alegreya-sans-latin-500-normal.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Alegreya Sans";font-style:normal;font-weight:500;font-display:swap;
+  src:url(polices/alegreya-sans-latin-ext-500-normal.woff2) format("woff2");
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Alegreya Sans";font-style:normal;font-weight:600 800;font-display:swap;
+  src:url(polices/alegreya-sans-latin-700-normal.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Alegreya Sans";font-style:normal;font-weight:600 800;font-display:swap;
+  src:url(polices/alegreya-sans-latin-ext-700-normal.woff2) format("woff2");
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Alegreya";font-style:normal;font-weight:500;font-display:swap;
+  src:url(polices/alegreya-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Alegreya";font-style:normal;font-weight:600 800;font-display:swap;
+  src:url(polices/alegreya-latin-700-normal.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+FEFF,U+FFFD}
+@font-face{font-family:"Alegreya";font-style:normal;font-weight:600 800;font-display:swap;
+  src:url(polices/alegreya-latin-ext-700-normal.woff2) format("woff2");
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1E00-1E9F,U+1EF2-1EFF}
+@font-face{font-family:"Amiri";font-style:normal;font-weight:400;font-display:swap;
+  src:url(polices/amiri-arabic-400-normal.woff2) format("woff2");
+  unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+@font-face{font-family:"Amiri";font-style:normal;font-weight:600 800;font-display:swap;
+  src:url(polices/amiri-arabic-700-normal.woff2) format("woff2");
+  unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+
+:root{
+  --fond:#F2F3F6;
+  --surface:#ffffff;
+  --texte:#172233;
+  --gris:#5A6679;
+  --gris-clair:#8C95A4;
+  --bord:#E1E4EA;
+  --p:#1D3557;          /* lapis */
+  --p-fonce:#13243C;
+  --p-clair:#E9EEF5;
+  --or:#C9A43A;         /* or des enluminures */
+  --or-fonce:#7E5F0E;
+  --or-clair:#F7EFD8;
+  --vert:#2F7D5B;
+  --vert-clair:#E5F2EB;
+  --orange:#A8620F;
+  --orange-clair:#FAEEDB;
+  --rouge:#B23A3A;
+  --rouge-clair:#F9E6E5;
+  --bleu:#4057A0;
+  --bleu-clair:#E8ECF8;
+  --rayon:12px;
+  --ombre:0 1px 2px rgba(19,36,60,.05), 0 6px 18px rgba(19,36,60,.05);
+  --titre:"Alegreya", Georgia, "Times New Roman", serif;
+  --texte-police:"Alegreya Sans", "Amiri", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --arabe:"Amiri", "Traditional Arabic", "Noto Naskh Arabic", serif;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:var(--texte-police);
+  font-size:17px;line-height:1.5;color:var(--texte);background:var(--fond);
+}
+a{color:var(--p-fonce)}
+h1,h2,h3{line-height:1.25;margin:0 0 .5rem}
+h1{font-size:1.4rem}
+h2{font-size:1.1rem}
+h3{font-size:1rem}
+code{background:#eef1f2;padding:.1em .35em;border-radius:4px;font-size:.9em}
+small{font-size:.82rem}
+
+/* ---------------- En-tête et navigation ---------------- */
+.entete{background:var(--p);color:#fff;position:sticky;top:0;z-index:20;box-shadow:var(--ombre)}
+.entete-inner{display:flex;align-items:center;justify-content:space-between;
+  padding:.65rem 1rem;max-width:1400px;margin:0 auto}
+.marque{display:flex;align-items:center;gap:.6rem;color:#fff;text-decoration:none}
+.marque-icone{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.18);
+  display:grid;place-items:center;font-weight:700;font-size:1.05rem}
+.marque-texte{display:flex;flex-direction:column;font-weight:600;font-size:.95rem;line-height:1.15}
+.marque-texte small{font-weight:400;opacity:.75;font-size:.72rem}
+.burger{background:none;border:0;padding:.4rem;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.burger span{display:block;width:22px;height:2px;background:#fff;border-radius:2px}
+
+.nav{display:none;flex-direction:column;padding:.25rem .5rem .75rem;background:var(--p-fonce)}
+body.menu-ouvert .nav{display:flex}
+.nav a{color:#fff;text-decoration:none;padding:.7rem .75rem;border-radius:8px;font-size:.95rem}
+.nav a.actif{background:rgba(255,255,255,.16);font-weight:600}
+.nav-compte{display:flex;align-items:center;gap:.5rem;opacity:.9}
+.nav-compte em{font-style:normal;font-size:.85rem}
+.nav-sortie{opacity:.8}
+
+@media(min-width:900px){
+  .burger{display:none}
+  .nav{display:flex;flex-direction:row;align-items:center;gap:.15rem;
+    max-width:1400px;margin:0 auto;padding:0 1rem .5rem}
+  .nav-espace{flex:1}
+  .nav-compte{background:rgba(255,255,255,.12);border-radius:20px;padding:.35rem .8rem}
+}
+
+/* ---------------- Structure ---------------- */
+main{max-width:1040px;margin:0 auto;padding:1rem 1rem 3rem}
+main.large{max-width:1400px}
+.pied{text-align:center;color:var(--gris-clair);font-size:.8rem;padding:0 1rem 2rem}
+
+.titre-page{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-start;
+  justify-content:space-between;margin:.25rem 0 1rem}
+.titre-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.sous-titre{margin:.15rem 0 0;color:var(--gris);font-size:.9rem}
+
+.bloc-section{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  padding:1rem;margin-bottom:1rem;box-shadow:var(--ombre)}
+.bloc-section.cachee{display:none}
+.entete-section{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap}
+.deux-colonnes{display:grid;gap:1rem}
+@media(min-width:900px){.deux-colonnes{grid-template-columns:1fr 1fr}}
+
+.aide{color:var(--gris);font-size:.87rem;margin:.25rem 0 .75rem}
+.vide{color:var(--gris);background:var(--surface);border:1px dashed var(--bord);
+  border-radius:var(--rayon);padding:1.25rem;text-align:center}
+.gris{color:var(--gris)}
+.num{text-align:right;white-space:nowrap}
+
+/* ---------------- Messages flash ---------------- */
+.flash{padding:.7rem .9rem;border-radius:10px;margin-bottom:.85rem;font-size:.92rem;border:1px solid}
+.flash-succes{background:var(--vert-clair);border-color:#bfe3cb;color:#14532d}
+.flash-erreur{background:var(--rouge-clair);border-color:#f0c4c1;color:#7f1d1d}
+.flash-attention{background:var(--orange-clair);border-color:#f2ddc0;color:#7c3a06}
+.flash-info{background:var(--bleu-clair);border-color:#ccd9f7;color:#1e3a8a}
+
+/* ---------------- Boutons ---------------- */
+.bouton{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;
+  padding:.6rem 1rem;border-radius:10px;border:1px solid var(--bord);background:var(--surface);
+  color:var(--texte);font-size:.92rem;font-weight:500;text-decoration:none;cursor:pointer;
+  font-family:inherit;transition:background .15s,border-color .15s}
+.bouton:hover{background:#f2f4f5}
+.bouton-principal{background:var(--p);border-color:var(--p);color:#fff}
+.bouton-principal:hover{background:var(--p-fonce)}
+.bouton-vert{background:var(--vert);border-color:var(--vert);color:#fff}
+.bouton-vert:hover{background:#12652f}
+.bouton-whatsapp{background:#25d366;border-color:#1eb955;color:#06301a;font-weight:600}
+.bouton-whatsapp:hover{background:#1eb955}
+.bouton.petit{padding:.38rem .6rem;font-size:.83rem;border-radius:8px}
+.bouton.bloc{width:100%}
+.bouton[disabled]{opacity:.5;cursor:not-allowed}
+.barre-actions{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:flex-end;margin-top:1rem}
+.barre-actions.gauche{justify-content:flex-start}
+
+/* ---------------- Formulaires ---------------- */
+label{display:block;font-size:.85rem;font-weight:600;color:#374151;margin-bottom:.25rem}
+input[type=text],input[type=email],input[type=password],input[type=tel],input[type=date],
+input[type=time],input[type=number],input[type=search],select,textarea{
+  width:100%;padding:.6rem .7rem;border:1px solid var(--bord);border-radius:10px;
+  font-size:16px;font-family:inherit;background:#fff;color:var(--texte)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--p);outline-offset:1px;border-color:var(--p)}
+textarea{resize:vertical}
+select[multiple]{height:auto}
+.form-grille{display:grid;gap:.85rem}
+@media(min-width:700px){.form-grille{grid-template-columns:1fr 1fr}}
+.form-grille .pleine-largeur{grid-column:1/-1}
+.form-inline{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.form-inline select,.form-inline input{width:auto;min-width:180px;flex:1}
+.case{display:flex;align-items:flex-start;gap:.5rem;font-weight:500;font-size:.9rem}
+.case input{width:auto;margin-top:.15rem}
+.options-cases{display:grid;gap:.6rem;margin:.85rem 0}
+.etiquette-champ{display:flex;align-items:center;gap:.35rem;font-size:.85rem;color:var(--gris);font-weight:500}
+.etiquette-champ input{width:auto}
+.barre-filtres{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;
+  background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  padding:.75rem;margin-bottom:1rem}
+.barre-filtres input[type=search]{flex:2;min-width:200px}
+.barre-filtres select{flex:1;min-width:150px}
+.form-date input{width:auto}
+.form-statut{display:inline-flex;gap:.3rem;align-items:center}
+.form-statut select{font-size:.82rem;padding:.3rem .45rem;border-radius:8px;width:auto;max-width:150px}
+@media(max-width:620px){
+  .masque-mobile{display:none}
+  .form-statut{flex-wrap:wrap}
+  .form-statut select{max-width:130px}
+}
+
+/* ---------------- Tuiles statistiques ---------------- */
+.tuiles{display:grid;grid-template-columns:repeat(2,1fr);gap:.7rem;margin-bottom:1rem}
+@media(min-width:800px){.tuiles{grid-template-columns:repeat(4,1fr)}}
+.tuile{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  padding:.85rem;box-shadow:var(--ombre)}
+.tuile strong{display:block;font-size:1.5rem;line-height:1.1}
+.tuile span{color:var(--gris);font-size:.82rem}
+.tuile.vert strong{color:var(--vert)}
+.tuile.orange strong{color:var(--orange)}
+.tuile.rouge strong{color:var(--rouge)}
+.tuile-lien{text-decoration:none;color:inherit;display:block}
+
+/* ---------------- Cartes de cours ---------------- */
+.grille-cartes{display:grid;gap:.85rem}
+@media(min-width:760px){.grille-cartes{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}}
+.carte-cours{background:var(--surface);border:1px solid var(--bord);border-left:4px solid var(--p);
+  border-radius:var(--rayon);padding:.9rem;box-shadow:var(--ombre)}
+.carte-cours.faite{border-left-color:var(--vert)}
+.carte-haut{display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem}
+.horaire{color:var(--gris);font-size:.85rem;font-variant-numeric:tabular-nums}
+.carte-cours h3{margin:.1rem 0 .25rem;font-size:1.02rem}
+.carte-meta{color:var(--gris);font-size:.85rem;margin:0 0 .6rem}
+.carte-etat{font-size:.85rem;margin:0 0 .6rem;font-weight:600}
+.carte-etat.ok{color:var(--vert)}
+.carte-etat.encours{color:var(--orange)}
+.carte-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+
+/* ---------------- Badges et pastilles ---------------- */
+.badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;font-size:.75rem;
+  font-weight:600;background:#eef1f2;color:#374151}
+.badge.vert{background:var(--vert-clair);color:#14532d}
+.badge.orange{background:var(--orange-clair);color:#7c3a06}
+.badge.gris{background:#eef1f2;color:var(--gris)}
+.petit-badge{font-size:.68rem;padding:.1rem .4rem}
+.niveau-n1{background:#e8eefc;color:#1e3a8a}
+.niveau-n2{background:var(--p-clair);color:#13243C}
+.niveau-n3{background:#f3ecfa;color:#5b21b6}
+.niveau-n4{background:#fdf0e6;color:#9a3412}
+.niveau-adultes{background:#eef1f2;color:#374151}
+
+.pastille{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
+  font-size:.72rem;font-weight:700;color:#fff;background:var(--gris-clair)}
+.pastille.vert{background:var(--vert)}
+.pastille.orange{background:var(--orange)}
+.pastille.rouge{background:var(--rouge)}
+.pastille.bleu{background:var(--bleu)}
+
+.alerte-ok{color:var(--gris)}
+.alerte-alerte{color:var(--orange);font-weight:700}
+.alerte-critique{background:var(--rouge);color:#fff;padding:.1rem .45rem;border-radius:999px;font-weight:700}
+.vert-texte{color:var(--vert);font-weight:600}
+.orange-texte{color:var(--orange);font-weight:600}
+.rouge-texte{color:var(--rouge);font-weight:600}
+
+/* ---------------- Tableaux ---------------- */
+.tableau-enveloppe{overflow-x:auto;-webkit-overflow-scrolling:touch;
+  border:1px solid var(--bord);border-radius:var(--rayon);background:var(--surface)}
+.tableau{width:100%;border-collapse:collapse;font-size:.92rem}
+.tableau th{text-align:left;padding:.6rem .75rem;background:#f8fafa;color:var(--gris);
+  font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;font-weight:700;
+  border-bottom:1px solid var(--bord);white-space:nowrap}
+.tableau td{padding:.6rem .75rem;border-bottom:1px solid #f0f2f3;vertical-align:middle}
+.tableau tr:last-child td{border-bottom:0}
+.tableau tbody tr:hover{background:#fafbfb}
+.tableau a{text-decoration:none}
+.tableau a:hover{text-decoration:underline}
+.tableau-dense td,.tableau-dense th{padding:.42rem .6rem;font-size:.86rem}
+.tableau .actions{display:flex;gap:.35rem;justify-content:flex-end;flex-wrap:wrap}
+.tableau .actions form{display:inline}
+tr.inactif{opacity:.55}
+tr.ligne-critique{background:var(--rouge-clair)}
+
+/* ---------------- Listes simples ---------------- */
+.liste-simple{list-style:none;margin:0;padding:0}
+.liste-simple li{display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+  padding:.6rem .1rem;border-bottom:1px solid #f0f2f3}
+.liste-simple li:last-child{border-bottom:0}
+.liste-simple a{text-decoration:none;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+.liste-simple span{color:var(--gris);font-size:.85rem}
+.liste-simple em{font-style:normal;color:var(--orange);font-size:.82rem;font-weight:600;white-space:nowrap}
+
+/* ---------------- Écran d'appel ---------------- */
+.barre-appel{display:flex;justify-content:space-between;align-items:center;gap:.75rem;
+  background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  padding:.6rem .8rem;margin-bottom:.85rem;position:sticky;top:56px;z-index:10;box-shadow:var(--ombre)}
+.compteurs{display:flex;gap:.7rem;flex-wrap:wrap;font-size:.83rem;color:var(--gris)}
+.compteurs b{font-weight:700;color:var(--texte)}
+.c-present b{color:var(--vert)}
+.c-absent b{color:var(--rouge)}
+.c-justifie b{color:var(--bleu)}
+
+.liste-appel{list-style:none;margin:0 0 1rem;padding:0;display:grid;gap:.6rem;
+  grid-template-columns:minmax(0,1fr)} /* v3.24 : un nom très long ne repousse plus les boutons P/A/J hors de l'écran */
+.ligne-eleve{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  padding:.7rem .8rem;box-shadow:var(--ombre)}
+.eleve-haut{display:flex;align-items:center;gap:.7rem}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--p-clair);color:var(--p-fonce);
+  display:grid;place-items:center;font-weight:700;font-size:.8rem;flex:none}
+.eleve-nom{flex:1;min-width:0}
+.eleve-nom strong{display:block;font-size:.97rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sans-tel{color:var(--orange);font-size:.75rem;font-style:normal}
+
+.statuts{display:flex;gap:.3rem;flex:none}
+.st{margin:0;position:relative}
+.st input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.st span{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;
+  border:1.5px solid var(--bord);font-weight:700;font-size:.9rem;color:var(--gris);background:#fff;
+  transition:all .12s}
+.st input:checked+span{color:#fff;border-color:transparent;transform:scale(1.04)}
+.st-vert input:checked+span{background:var(--vert)}
+.st-orange input:checked+span{background:var(--orange)}
+.st-rouge input:checked+span{background:var(--rouge)}
+.st-bleu input:checked+span{background:var(--bleu)}
+.st input:focus-visible+span{outline:2px solid var(--p);outline-offset:2px}
+
+.lien-commentaire{margin-top:.5rem;background:none;border:0;padding:.2rem 0;color:var(--p-fonce);
+  font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:underline}
+.lien-commentaire.rempli{color:var(--or)}
+.detail-eleve{display:none;margin-top:.5rem;padding-top:.6rem;border-top:1px dashed var(--bord)}
+.detail-eleve.ouvert{display:block}
+.detail-grille{display:grid;gap:.6rem;margin-top:.6rem}
+.detail-grille .pleine-largeur{grid-column:1/-1}
+.phrases{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.5rem}
+.puce{background:var(--p-clair);border:1px solid #D3DCE9;color:var(--p-fonce);border-radius:999px;
+  padding:.28rem .6rem;font-size:.78rem;cursor:pointer;font-family:inherit}
+.puce:hover{background:#DCE4F0}
+.appreciations{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.puce-radio{position:relative;margin:0}
+.puce-radio input{position:absolute;opacity:0}
+.puce-radio span{display:inline-block;padding:.3rem .65rem;border-radius:999px;border:1px solid var(--bord);
+  font-size:.8rem;cursor:pointer;background:#fff}
+.puce-radio input:checked+span{background:var(--p);border-color:var(--p);color:#fff}
+
+/* ---------------- Messages WhatsApp ---------------- */
+.zone-message{font-size:.9rem;line-height:1.45;background:#fcfdfd;font-family:inherit}
+.liste-messages{list-style:none;margin:0;padding:0;display:grid;gap:.8rem}
+.carte-message{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  padding:.8rem;box-shadow:var(--ombre)}
+.carte-message.envoye{border-color:#bfe3cb;background:#fbfdfc}
+.message-haut{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap}
+.message-haut strong{margin-right:.4rem}
+.message-haut .tel{color:var(--gris);font-size:.82rem;margin-left:.4rem}
+.etat-envoi{color:var(--vert);font-size:.8rem;font-weight:700}
+.compteur-restants{font-size:.8rem;color:var(--orange);font-weight:600;margin-left:.4rem}
+.carte-groupe{border-left:4px solid var(--or)}
+.apercu-message{background:#f8fafa;border:1px solid var(--bord);border-radius:10px;padding:.8rem;
+  white-space:pre-wrap;font-size:.88rem;font-family:inherit;margin:0}
+.mdp-affiche{font-size:1.5rem;font-weight:700;letter-spacing:.08em;background:#f8fafa;
+  border:1px dashed var(--bord);border-radius:10px;padding:.7rem;text-align:center;margin:.5rem 0}
+
+/* ---------------- Historique élève ---------------- */
+.historique{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
+.historique li{border-left:3px solid var(--bord);padding:.5rem .1rem .5rem .75rem}
+.historique li.statut-vert{border-left-color:var(--vert)}
+.historique li.statut-orange{border-left-color:var(--orange)}
+.historique li.statut-rouge{border-left-color:var(--rouge)}
+.historique li.statut-bleu{border-left-color:var(--bleu)}
+.hist-haut{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.hist-date{font-weight:600;font-size:.88rem;font-variant-numeric:tabular-nums}
+.hist-groupe{color:var(--gris);font-size:.85rem}
+.hist-commentaire{margin:.35rem 0 0;font-size:.92rem}
+.hist-travail{margin:.2rem 0 0;font-size:.85rem;color:var(--gris)}
+.fiche{display:grid;grid-template-columns:auto 1fr;gap:.35rem .9rem;margin:0}
+.fiche dt{font-weight:600;color:var(--gris);font-size:.85rem}
+.fiche dd{margin:0}
+
+/* ---------------- Onglets, pagination ---------------- */
+.onglets{display:flex;gap:.3rem;border-bottom:1px solid var(--bord);margin-bottom:1rem;overflow-x:auto}
+.onglets a{padding:.6rem .9rem;text-decoration:none;color:var(--gris);font-size:.9rem;
+  font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}
+.onglets a.actif{color:var(--p-fonce);border-bottom-color:var(--p)}
+.pagination{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.85rem;justify-content:center}
+.pagination a{padding:.4rem .7rem;border:1px solid var(--bord);border-radius:8px;
+  text-decoration:none;background:var(--surface);font-size:.88rem}
+.pagination a.actif{background:var(--p);border-color:var(--p);color:#fff;font-weight:600}
+.encadre-alerte{border-left:4px solid var(--rouge)}
+.encadre-succes{border-left:4px solid var(--vert)}
+.bloc-inscription{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  padding:1rem;margin-bottom:.85rem;display:grid;gap:.6rem}
+.bloc-inscription.cachee{display:none}
+
+/* ---------------- Connexion et installation ---------------- */
+.page-connexion,.page-installation{background:var(--p);min-height:100vh;
+  display:grid;place-items:center;padding:1.25rem}
+.carte-connexion,.carte-installation{background:#fff;border-radius:16px;padding:1.75rem;
+  width:100%;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.carte-installation{max-width:620px}
+.logo-connexion{width:52px;height:52px;border-radius:14px;background:var(--p-clair);color:var(--p-fonce);
+  display:grid;place-items:center;font-size:1.5rem;font-weight:700;margin-bottom:.75rem}
+.carte-connexion h1{font-size:1.25rem;margin-bottom:.15rem}
+.carte-connexion label{margin-top:.85rem}
+.carte-connexion button{margin-top:1.15rem}
+.aide-connexion{color:var(--gris);font-size:.82rem;margin-top:1.15rem;text-align:center}
+.etapes{display:flex;gap:.5rem;list-style:none;padding:0;margin:0 0 1.25rem;font-size:.82rem;color:var(--gris)}
+.etapes li{flex:1;padding:.45rem .5rem;border-radius:8px;background:#f1f4f4;text-align:center}
+.etapes li.faite{background:var(--p-clair);color:var(--p-fonce);font-weight:600}
+.verifications{list-style:none;padding:0;margin:0 0 1.25rem;font-size:.9rem}
+.verifications li{padding:.35rem 0;border-bottom:1px solid #f0f2f3}
+.verifications li.ok::before{content:"✓ ";color:var(--vert);font-weight:700}
+.verifications li.ko::before{content:"✗ ";color:var(--rouge);font-weight:700}
+
+/* ---------------- Impression ---------------- */
+@media print{
+  .entete,.barre-actions,.titre-actions,.barre-filtres,.pied,.bouton{display:none!important}
+  body{background:#fff}
+  .bloc-section,.tableau-enveloppe{box-shadow:none;border:1px solid #ccc}
+}
+
+/* ================= Version 1.3 : retards ================= */
+.cachee{display:none !important}
+.c-retard b{color:var(--orange)}
+.retard-ligne{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin:.45rem 0 0 calc(36px + .7rem)}
+.case-retard{position:relative;display:inline-flex;align-items:center;gap:.4rem;margin:0;cursor:pointer;
+  font-size:.85rem;font-weight:600;color:var(--gris)}
+.case-retard input{width:18px;height:18px;margin:0;accent-color:var(--orange)}
+.case-retard input:checked+span{color:var(--orange)}
+.minutes-retard{display:inline-flex;align-items:center;gap:.35rem;font-size:.85rem;color:var(--gris)}
+.minutes-retard input{width:4.2rem;padding:.3rem .45rem;font-size:.9rem;border-radius:8px}
+.aide-min{font-style:normal;font-size:.75rem;color:var(--gris-clair)}
+.bouton-danger{background:var(--rouge);border-color:var(--rouge);color:#fff}
+.bouton-danger:hover{background:#8f1e17}
+.form-renvoi{align-items:center;margin:-.35rem 0 .9rem}
+.form-renvoi .aide{margin:0}
+.badge.rouge-plein{background:var(--rouge);color:#fff}
+
+/* ================= Version 1.3 : progression ================= */
+.encadre-progression{border-left:4px solid var(--or)}
+.prog-rappel{display:flex;gap:.7rem;align-items:flex-start;margin-bottom:.6rem}
+.prog-rappel .badge{flex:none;margin-top:.15rem}
+.carte-progression{display:block;font-size:.82rem;color:var(--or);text-decoration:none;font-weight:600;
+  margin:-.1rem 0 .35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.choix-groupes{display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.35rem;margin-bottom:.9rem;
+  -webkit-overflow-scrolling:touch}
+.choix-groupe{flex:none;padding:.42rem .8rem;border:1px solid var(--bord);border-radius:999px;background:var(--surface);
+  color:var(--texte);text-decoration:none;font-size:.86rem;white-space:nowrap}
+.choix-groupe.actif{background:var(--p);border-color:var(--p);color:#fff;font-weight:600}
+.choix-sep{flex:none;width:1px;background:var(--bord);margin:0 .2rem}
+.intro-progression{margin-top:-.4rem}
+
+.carte-semaine-en-cours{display:flex;flex-direction:column;gap:.15rem;text-decoration:none;color:inherit;
+  background:linear-gradient(135deg,#fff8ea,#fff);border:1px solid #efdcb4;border-left:4px solid var(--or);
+  border-radius:var(--rayon);padding:.85rem 1rem;margin-bottom:1rem;box-shadow:var(--ombre)}
+.carte-semaine-en-cours .etiquette{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--or);font-weight:700}
+.carte-semaine-en-cours strong{font-size:1.05rem}
+.carte-semaine-en-cours span{color:var(--gris);font-size:.87rem}
+.carte-semaine-en-cours .devoirs-rappel{color:var(--texte);margin-top:.25rem}
+
+.titre-periode{margin:1.4rem 0 .6rem;font-size:1rem;display:flex;flex-wrap:wrap;gap:.2rem .6rem;align-items:baseline}
+.titre-periode small{font-weight:400;color:var(--gris);font-size:.82rem}
+
+details.semaine{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);
+  margin-bottom:.5rem;scroll-margin-top:90px}
+details.semaine>summary{list-style:none;display:flex;gap:.75rem;align-items:center;padding:.7rem .9rem;cursor:pointer}
+details.semaine>summary::-webkit-details-marker{display:none}
+details.semaine[open]>summary{border-bottom:1px dashed var(--bord)}
+details.semaine.courante{border-color:var(--or);box-shadow:0 0 0 2px #f3e3bf}
+details.semaine.faite .num-semaine{background:var(--vert-clair);color:#14532d}
+details.semaine.semaine-controle{background:#fafbfb}
+.num-semaine{flex:none;width:2.6rem;height:2.6rem;border-radius:10px;display:grid;place-items:center;
+  background:var(--p-clair);color:var(--p-fonce);font-weight:700;font-size:.92rem}
+.semaine-titre{flex:1;min-width:0;display:flex;flex-direction:column}
+.semaine-titre strong{font-size:.97rem}
+.semaine-titre .gris{font-size:.8rem}
+.semaine-etats{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end}
+.semaine-corps{padding:.8rem .9rem 1rem}
+.semaine-corps h3{font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gris);margin:0 0 .3rem}
+.semaine-corps p{margin:0 0 .4rem}
+.semaine-corps ul{margin:0;padding-left:1.1rem}
+.semaine-grille{display:grid;gap:.9rem}
+@media(min-width:720px){.semaine-grille{grid-template-columns:1fr 1fr}}
+.arabe{font-family:"Amiri","Scheherazade New","Traditional Arabic","Noto Naskh Arabic",serif;font-size:1.9rem;
+  line-height:1.8;color:var(--p-fonce);text-align:right;margin:0 0 .6rem}
+.arabe-champ{font-size:1.2rem}
+.bloc-devoirs{margin-top:.9rem;background:#fff8ea;border:1px solid #efdcb4;border-radius:10px;padding:.7rem .85rem}
+.bloc-devoirs .defi{margin-top:.3rem}
+.bloc-devoirs .aide{margin:.35rem 0 0}
+.petit-texte{font-size:.8rem}
+.depliant{margin-top:.75rem}
+.depliant summary,.depliant-section>summary{cursor:pointer;color:var(--p-fonce)}
+.depliant-section>summary{padding:.1rem 0}
+.depliant-section[open]>summary{margin-bottom:.6rem}
+.deroule td{vertical-align:top}
+.horaire-deroule{white-space:nowrap;width:1%;font-variant-numeric:tabular-nums}
+#reprendre-devoirs{margin:.1rem 0 .8rem}
+.bloc-videos{margin-top:.8rem}
+.bloc-videos p{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:0 0 .4rem}
+.bouton-video{text-decoration:none}
+
+/* 1.7 : devoir à faire en un geste */
+.bloc-devoir .devoir-tete{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap;margin-bottom:.5rem}
+.carte-devoir{display:flex;align-items:stretch;gap:.4rem;background:#fff8ea;border:1px solid #efdcb4;border-left:4px solid var(--or);border-radius:var(--rayon);padding:.5rem}
+.dv-fleche{flex:none;width:2.6rem;border:0;border-radius:8px;background:#fff;font-size:1.1rem;color:var(--p-fonce);cursor:pointer}
+.dv-fleche:active{background:var(--p-clair)}
+.dv-corps{flex:1;min-width:0;padding:.2rem .3rem}
+.dv-num{font-size:.78rem;color:var(--or);text-transform:uppercase;letter-spacing:.04em}
+.dv-num b{color:var(--p-fonce)}
+.dv-num small{text-transform:none;letter-spacing:0;color:var(--gris)}
+.dv-titre{font-weight:700;margin:.1rem 0}
+.dv-texte{font-size:.95rem}
+.dv-actions{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin:.5rem 0}
+.dv-actions .case{margin:0}
+#dv-zone{margin-top:.4rem}
+
+.carte-etat.alerte{color:var(--rouge);font-weight:700}
+.bouton-whatsapp{background:#1f9d55;border-color:#1f9d55;color:#fff}
+.liste-appels-manquants li{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
+
+/* ------------------------------------------------------------------
+   v2.0 — Espace familles et messagerie
+   ------------------------------------------------------------------ */
+.compteur-nav{display:inline-grid;place-items:center;min-width:1.35rem;height:1.35rem;padding:0 .35rem;
+  margin-left:.3rem;border-radius:999px;background:#fbbf24;color:#422006;font-size:.75rem;font-weight:700}
+.lien-bandeau{display:block;text-decoration:none;font-weight:600}
+.lien-bandeau:hover{filter:brightness(.97)}
+
+/* Liste des conversations */
+.liste-conversations{list-style:none;margin:0;padding:0;background:var(--surface);
+  border:1px solid var(--bord);border-radius:var(--rayon);overflow:hidden}
+.liste-conversations li+li{border-top:1px solid var(--bord)}
+.liste-conversations a{display:grid;grid-template-columns:1fr auto;gap:.15rem .75rem;
+  padding:.8rem 1rem;text-decoration:none;color:var(--texte)}
+.liste-conversations a:hover{background:#f8faf9}
+.conv-titre{font-weight:600;grid-column:1}
+.conv-meta{grid-column:1;color:var(--gris);font-size:.86rem}
+.conv-meta strong{color:var(--texte);font-weight:600}
+.conv-date{grid-column:2;grid-row:1/3;align-self:center;text-align:right;color:var(--gris);
+  font-size:.8rem;display:flex;flex-direction:column;align-items:flex-end;gap:.25rem}
+.liste-conversations li.non-lu{box-shadow:inset 4px 0 0 var(--p)}
+.liste-conversations li.non-lu .conv-titre{color:var(--p-fonce)}
+
+/* Fil de discussion */
+.conv-infos{display:flex;flex-wrap:wrap;gap:.35rem .8rem;align-items:center;font-size:.88rem;margin-bottom:.9rem}
+.fil{display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem}
+.bulle{max-width:min(620px,88%);padding:.6rem .85rem;border-radius:14px;border:1px solid var(--bord);
+  background:var(--surface);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.bulle.mienne{align-self:flex-end;background:var(--p-clair);border-color:#CFD9E7;border-bottom-right-radius:4px}
+.bulle.autre{align-self:flex-start;border-bottom-left-radius:4px}
+.bulle-auteur{font-size:.78rem;font-weight:600;color:var(--p-fonce);margin-bottom:.2rem}
+.bulle-auteur span{font-weight:400;color:var(--gris);margin-left:.3rem}
+.bulle-texte{white-space:normal;overflow-wrap:anywhere}
+.form-reponse textarea{min-height:6rem}
+.form-reponse .case{margin-top:.6rem}
+.form-inline{display:inline-flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:.3rem .4rem 0 0}
+.form-inline label{margin:0}
+.form-inline input[type=tel]{width:9rem}
+
+/* Invitations et avis WhatsApp */
+.liste-invitations{list-style:none;margin:.5rem 0 0;padding:0}
+.liste-invitations li{display:flex;justify-content:space-between;align-items:center;gap:.6rem;
+  flex-wrap:wrap;padding:.55rem 0;border-top:1px solid var(--bord)}
+.inv-actions{display:flex;gap:.4rem;align-items:center}
+.ligne-edition td{background:#f8faf9}
+.ligne-famille{margin:.2rem 0 .8rem;font-size:.9rem}
+.choix-mode{display:flex;gap:1.2rem;flex-wrap:wrap}
+.choix-mode .case{margin:0}
+
+/* Pages publiques de l'espace familles */
+.page-connexion main{width:100%;max-width:none;padding:0;display:grid;place-items:center}
+.page-connexion main>.flash{max-width:420px;width:100%}
+.encart-info{background:var(--p-clair);border-radius:10px;padding:.6rem .75rem;margin:.9rem 0 .2rem;color:#13243C}
+.carte-connexion .case{margin-top:.6rem;font-weight:500}
+
+/* ------------------------------------------------------------------
+   v2.1 — Devoirs, cahier de textes, suivi
+   ------------------------------------------------------------------ */
+.badge.rouge{background:var(--rouge-clair);color:#7f1d1d}
+.badge.bleu{background:var(--bleu-clair);color:#1e3a8a}
+.liste-devoirs{list-style:none;margin:0;padding:0}
+.liste-devoirs .devoir{display:flex;gap:.75rem;align-items:flex-start;flex-wrap:wrap;
+  padding:.75rem 0;border-top:1px solid var(--bord)}
+.liste-devoirs .devoir:first-child{border-top:0}
+.liste-devoirs .devoir>div{flex:1;min-width:220px}
+.liste-devoirs.personnel .devoir{display:block}
+.liste-devoirs.personnel .inv-actions{margin-top:.4rem;flex-wrap:wrap}
+.devoir-tete{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap;margin-bottom:.2rem}
+.devoir-consigne{margin:.15rem 0 .35rem;overflow-wrap:anywhere}
+.devoir.fait .devoir-consigne{color:var(--gris);text-decoration:line-through;text-decoration-color:#c5ccd3}
+.videos-devoir{display:flex;gap:.35rem;flex-wrap:wrap;margin:.2rem 0}
+.coche-devoir{flex:none}
+.case-fait{width:2rem;height:2rem;border-radius:8px;border:2px solid var(--bord);background:#fff;
+  font-size:1.1rem;font-weight:700;color:#fff;cursor:pointer;display:grid;place-items:center}
+.devoir.fait .case-fait{background:var(--vert);border-color:var(--vert)}
+.case-fait:hover{border-color:var(--p)}
+.liste-devoirs form.form-grille{flex-basis:100%;margin-top:.5rem}
+.cahier{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
+.cahier>li{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);padding:.75rem 1rem}
+.cahier-date{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.35rem}
+.cahier-corps{display:grid;gap:.35rem;font-size:.95rem}
+.etiquette{display:inline-block;min-width:8.5rem;font-size:.75rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.03em;color:var(--p-fonce)}
+.titre-section-famille{margin-top:1.2rem}
+
+/* v2.2 — lien devoirs / progression */
+.carte-a-donner{background:#fffaf0;border:1px solid #f1dfb8;border-radius:10px;padding:.7rem .85rem;margin:.4rem 0 .7rem}
+.form-carte{width:100%}
+.form-carte select{flex:1 1 280px;min-width:0;max-width:100%}
+.form-carte .bouton{flex:0 0 auto}
+a.badge{text-decoration:none}
+
+/* ==================================================================
+   v2.3 — Direction « Enluminure »
+   Lapis, or et page blanche. Le motif signature est l'étoile à huit
+   branches des manuscrits (deux carrés croisés), tracée en filet doré.
+   Il n'apparaît qu'à trois endroits : l'en-tête, la marque, et le
+   moment où une action aboutit (message de réussite).
+   ================================================================== */
+
+/* ---- Typographie ---- */
+h1,h2,h3,.marque-texte,.tuile strong,.titre-periode,.cahier-date strong,
+.carte-connexion h1,.conv-titre{font-family:var(--titre);letter-spacing:.005em}
+h1{font-size:1.75rem;font-weight:700;color:var(--p)}
+h2{font-size:1.28rem;font-weight:700;color:var(--p)}
+h3{font-size:1.08rem;font-weight:700;color:var(--p-fonce)}
+.sous-titre{font-size:.95rem}
+.arabe,[lang="ar"],.dv-texte [dir="rtl"]{font-family:var(--arabe);font-size:1.45em;line-height:1.9}
+label{color:#2B3950;font-weight:700}
+a{color:var(--p);text-decoration-color:rgba(201,164,58,.7);text-underline-offset:.18em}
+a:hover{color:var(--p-fonce)}
+::selection{background:var(--or-clair);color:var(--p-fonce)}
+
+/* ---- En-tête : bande de lapis, étoiles en filet doré, liseré d'or ---- */
+.entete{
+  background-color:var(--p);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cg fill='none' stroke='%23C9A43A' stroke-opacity='.2' stroke-width='1'%3E%3Crect x='17' y='17' width='22' height='22'/%3E%3Crect x='17' y='17' width='22' height='22' transform='rotate(45 28 28)'/%3E%3Ccircle cx='28' cy='28' r='4'/%3E%3C/g%3E%3C/svg%3E");
+  background-size:56px 56px;
+  border-bottom:2px solid var(--or);
+  box-shadow:0 2px 0 rgba(201,164,58,.25), 0 8px 20px rgba(19,36,60,.12)}
+.marque{gap:.7rem}
+.marque-icone{width:40px;height:40px;background:none;border-radius:0;display:block}
+.marque-icone svg{display:block;width:40px;height:40px}
+.marque-texte{font-size:1.12rem;font-weight:700;color:#FBF6E6}
+.marque-texte small{font-family:var(--texte-police);font-weight:500;opacity:.8;font-size:.78rem;color:#E7D9AE}
+.nav{background:var(--p-fonce)}
+.nav a{font-weight:500;letter-spacing:.01em;position:relative}
+.nav a.actif{background:rgba(255,255,255,.08);font-weight:700}
+.nav a:focus-visible{outline:2px solid var(--or);outline-offset:1px}
+@media(min-width:900px){
+  .nav{background:transparent}
+  .nav a.actif{background:none}
+  .nav a.actif::after{content:"";position:absolute;left:.75rem;right:.75rem;bottom:.3rem;height:2px;
+    background:var(--or);border-radius:2px}
+  .nav-compte{background:rgba(255,255,255,.08);border:1px solid rgba(201,164,58,.45)}
+}
+.compteur-nav{background:var(--or);color:var(--p-fonce)}
+
+/* ---- Surfaces ---- */
+.bloc-section,.tuile,.ligne-eleve,.carte-cours,.carte-message,.barre-filtres,.tableau-enveloppe,
+.liste-conversations,.cahier>li{border-color:var(--bord)}
+.bloc-section>h2:first-child{padding-bottom:.45rem;margin-bottom:.8rem;border-bottom:1px solid var(--or-clair)}
+.encadre-succes{border-left-color:var(--vert)}
+.encadre-progression{border-left:4px solid var(--or)}
+.carte-cours{border-left-color:var(--or)}
+.carte-cours.faite{border-left-color:var(--vert)}
+.vide{border-color:#D5CDB5;background:#FDFBF5;color:var(--gris)}
+
+/* Tuiles : chiffres en Alegreya, un trait d'or pour tenir la ligne */
+.tuile{position:relative;overflow:hidden}
+.tuile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--or-clair)}
+.tuile strong{font-size:1.9rem;font-weight:700;color:var(--p)}
+.tuile.vert::before{background:var(--vert)}
+.tuile.orange::before{background:var(--orange)}
+.tuile.rouge::before{background:var(--rouge)}
+
+/* Tableaux : en-têtes en casse normale, plus sobres */
+.tableau th{text-transform:none;letter-spacing:0;font-size:.85rem;font-weight:700;
+  color:var(--p);background:#F7F8FB;border-bottom:1px solid var(--or-clair)}
+.tableau tbody tr:hover{background:#FBF8EE}
+
+/* ---- Boutons ---- */
+.bouton{border-radius:10px;font-weight:700;letter-spacing:.01em;transition:background .15s,border-color .15s,transform .08s}
+.bouton:hover{background:#F4F6FA;border-color:#C9D2E0}
+.bouton:active{transform:translateY(1px)}
+.bouton:focus-visible,.puce:focus-visible,.case-fait:focus-visible{outline:2px solid var(--or);outline-offset:2px}
+.bouton-principal{background:var(--p);border-color:var(--p);color:#FBF6E6;
+  box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
+.bouton-principal:hover{background:var(--p-fonce);border-color:var(--p-fonce);color:#fff}
+.bouton-danger{color:var(--rouge);border-color:#EBC2C0}
+.bouton-danger:hover{background:var(--rouge-clair);border-color:var(--rouge)}
+.bouton-whatsapp{background:#1f9d55;border-color:#1f9d55;color:#fff}
+.bouton-whatsapp:hover{background:#17804a;border-color:#17804a}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--or);outline-offset:0;border-color:var(--p)}
+
+/* ---- Badges, pastilles, niveaux ---- */
+.badge{font-weight:700}
+.niveau-n1{background:var(--p-clair);color:var(--p)}
+.niveau-n2{background:var(--or-clair);color:var(--or-fonce)}
+.niveau-n3{background:#EDE9F6;color:#4B3B87}
+.avatar{background:var(--or-clair);color:var(--or-fonce);font-family:var(--titre)}
+.puce{background:var(--p-clair);border-color:#D3DCE9;color:var(--p)}
+
+/* ---- Écran d'appel : chaque statut se « pose » quand on le choisit ---- */
+.st span{border-radius:12px;font-size:1rem;width:42px;height:42px}
+.st input:checked+span{animation:poser .26s cubic-bezier(.3,1.6,.5,1)}
+@keyframes poser{0%{transform:scale(.82)}60%{transform:scale(1.08)}100%{transform:scale(1.04)}}
+.st input:focus-visible+span{outline:2px solid var(--or)}
+.barre-appel{border-bottom:2px solid var(--or-clair)}
+
+/* ---- Devoirs : la case « fait » se coche d'un trait ---- */
+.case-fait{border-color:#C9D2E0}
+.devoir.fait .case-fait{animation:poser .26s cubic-bezier(.3,1.6,.5,1)}
+
+/* ---- Fil de messages ---- */
+.bulle.mienne{background:var(--p-clair);border-color:#CFD9E7}
+.bulle-auteur{color:var(--p)}
+
+/* ---- Message de réussite : l'étoile se trace, puis le bandeau se pose ---- */
+.flash{border-radius:12px;display:flex;align-items:center;gap:.65rem}
+.flash-succes{background:#F2F8F4;border-color:#C6E2D2;color:#1D5A40}
+.etoile-trace{flex:none;width:26px;height:26px}
+.etoile-trace path{fill:none;stroke:var(--or);stroke-width:1.6;stroke-linejoin:round;
+  stroke-dasharray:120;stroke-dashoffset:120;animation:tracer .9s ease-out .05s forwards}
+.etoile-trace circle{fill:var(--vert);transform-origin:13px 13px;transform:scale(0);animation:eclore .3s ease-out .8s forwards}
+.flash-succes{animation:poser-bandeau .35s ease-out}
+@keyframes tracer{to{stroke-dashoffset:0}}
+@keyframes eclore{to{transform:scale(1)}}
+@keyframes poser-bandeau{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+/* ---- Pages de connexion : tapis d'étoiles ---- */
+.page-connexion,.page-installation{
+  background-color:var(--p);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cg fill='none' stroke='%23C9A43A' stroke-opacity='.22' stroke-width='1'%3E%3Crect x='22' y='22' width='28' height='28'/%3E%3Crect x='22' y='22' width='28' height='28' transform='rotate(45 36 36)'/%3E%3Ccircle cx='36' cy='36' r='5'/%3E%3C/g%3E%3C/svg%3E");
+  background-size:72px 72px}
+.carte-connexion{border-top:4px solid var(--or);border-radius:16px}
+.logo-connexion{width:auto;height:auto;background:none;border-radius:0;margin-bottom:.6rem}
+.logo-connexion svg{width:58px;height:58px;display:block}
+.carte-connexion h1{font-size:1.45rem}
+.encart-info{background:var(--or-clair);color:#5A4410}
+
+/* ---- Pied de page : un fleuron ---- */
+.pied::before{content:"";display:block;width:22px;height:22px;margin:0 auto .5rem;opacity:.7;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cg fill='none' stroke='%23C9A43A' stroke-width='1.4'%3E%3Crect x='6' y='6' width='14' height='14'/%3E%3Crect x='6' y='6' width='14' height='14' transform='rotate(45 13 13)'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat}
+
+/* ---- Progression : semaines, cartes ---- */
+.carte-semaine-en-cours{border-left:4px solid var(--or)}
+.carte-a-donner{background:#FDFAF1;border-color:#EADDB5}
+.dv-num{color:var(--or-fonce)}
+
+/* ---- Mouvement réduit : on respecte le réglage du téléphone ---- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-delay:0s !important;transition-duration:.01ms !important}
+  .etoile-trace path{stroke-dashoffset:0}
+  .etoile-trace circle{transform:scale(1)}
+}
+
+/* Réglages fins après relecture des captures */
+.nav a{white-space:nowrap}
+.tuile strong,h1,h2,.cahier-date strong,.dv-num,.horaire,.tableau td{font-variant-numeric:lining-nums tabular-nums}
+@media(min-width:900px){
+  .nav{flex-wrap:wrap;row-gap:0}
+  .nav a{padding:.6rem .55rem;font-size:.95rem}
+  .nav-compte{white-space:nowrap}
+  .nav-compte em{white-space:nowrap}
+}
+@media(min-width:900px) and (max-width:1320px){
+  .nav a{padding:.55rem .42rem;font-size:.9rem}
+  .nav-compte em{display:none}
+}
+
+.dv-num{text-transform:none;letter-spacing:0}
+@media(max-width:600px){.form-carte .bouton{flex:1 1 100%}}
+
+/* ==================================================================
+   v2.4 — Évaluations et bulletins
+   ================================================================== */
+.bandeau-controle{display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap}
+
+.liste-evaluations{list-style:none;margin:0;padding:0}
+.liste-evaluations>li{padding:.7rem 0;border-top:1px solid var(--bord)}
+.liste-evaluations>li:first-child{border-top:0}
+.eval-lien{display:flex;justify-content:space-between;align-items:center;gap:1rem;text-decoration:none;color:var(--texte)}
+.eval-titre{display:flex;flex-direction:column}
+.eval-titre .gris{font-size:.88rem}
+.eval-moyenne{font-family:var(--titre);font-weight:700;font-size:1.6rem;color:var(--p);
+  font-variant-numeric:lining-nums tabular-nums;white-space:nowrap}
+.eval-moyenne small{font-size:.8rem;color:var(--gris);font-weight:500;margin-left:.1rem}
+.eval-moyenne.petite{font-size:1.15rem}
+.repartition{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;margin-top:.35rem}
+.repartition form{margin-left:auto}
+
+/* Saisie des notes */
+.grille-legende{display:flex;gap:.4rem 1.1rem;flex-wrap:wrap;font-size:.88rem;color:var(--gris);margin:0 0 .7rem}
+.grille-legende b{display:inline-grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:6px;
+  background:var(--p);color:#FBF6E6;font-family:var(--titre);margin-right:.25rem}
+.grille-legende em{font-style:normal;color:var(--or-fonce)}
+.liste-notes{list-style:none;margin:0 0 1rem;padding:0;display:grid;gap:.6rem}
+.ligne-note{background:var(--surface);border:1px solid var(--bord);border-radius:var(--rayon);padding:.75rem .85rem;
+  box-shadow:var(--ombre);display:grid;gap:.55rem}
+@media(min-width:900px){.ligne-note{grid-template-columns:minmax(180px,1fr) auto minmax(220px,1.2fr);align-items:center}}
+.note-eleve{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+.note-absent{margin:0;font-size:.85rem;color:var(--gris)}
+.note-criteres{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+.note-champ{display:flex;align-items:center;gap:.2rem;margin:0;font-weight:700;color:var(--p)}
+.note-champ span{font-family:var(--titre);width:1.1rem;text-align:center}
+.note-champ input{width:3.6rem;padding:.45rem .35rem;text-align:center;font-variant-numeric:tabular-nums}
+.note-champ em{font-style:normal;font-weight:500;font-size:.78rem;color:var(--gris)}
+.note-total{min-width:3.2rem;text-align:right;font-family:var(--titre);font-weight:700;font-size:1.35rem;
+  color:var(--p);font-variant-numeric:lining-nums tabular-nums}
+.note-niveau{min-width:4.2rem}
+.note-appreciation{font-size:.95rem}
+.ligne-note.absente{background:#F7F8FA}
+.ligne-note.absente .note-criteres{opacity:.45}
+
+/* Bulletins du groupe */
+.liste-bulletins{list-style:none;margin:0;padding:0}
+.liste-bulletins>li{padding:.85rem 0;border-top:1px solid var(--bord)}
+.liste-bulletins>li:first-child{border-top:0}
+.bulletin-ligne-tete{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin-bottom:.5rem}
+
+/* Le bulletin lui-même */
+.bulletin{background:var(--surface);border:1px solid var(--bord);border-top:4px solid var(--or);
+  border-radius:var(--rayon);padding:1.4rem 1.5rem;box-shadow:var(--ombre);max-width:860px;margin:0 auto 1rem}
+.bulletin-tete{display:flex;gap:1rem;align-items:center;padding-bottom:.9rem;border-bottom:1px solid var(--or-clair);margin-bottom:.9rem}
+.bulletin-marque{width:54px;height:54px;flex:none}
+.bulletin-asso{font-family:var(--titre);font-weight:700;color:var(--p);font-size:1.05rem}
+.bulletin-titre{font-family:var(--titre);font-weight:700;font-size:1.5rem;color:var(--p)}
+.bulletin-identite{display:grid;gap:.4rem 1.5rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:1rem}
+.bulletin .etiquette{display:block;min-width:0;margin-bottom:.1rem}
+.bulletin-notes{margin-bottom:1rem}
+.bulletin-notes th small{font-weight:500;color:var(--gris);margin-left:.1rem}
+.bulletin-remarque{font-size:.88rem;color:var(--gris);font-style:italic;margin-top:.2rem}
+.bulletin-synthese{display:grid;gap:.8rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  background:#FBF8EE;border:1px solid #EFE4C4;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem}
+.bulletin-moyenne strong{font-family:var(--titre);font-size:2rem;color:var(--p);margin-right:.5rem;
+  font-variant-numeric:lining-nums tabular-nums}
+.bulletin-moyenne strong small{font-size:.9rem;color:var(--gris)}
+.bulletin-appreciations{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.bulletin-appreciations p{margin:.2rem 0 0;min-height:2.5rem}
+.bulletin-conseil{border-top:1px dashed var(--bord);padding-top:.6rem}
+.bulletin-pied{font-size:.78rem;margin-top:1rem;padding-top:.6rem;border-top:1px solid var(--or-clair)}
+
+/* Évolution des notes sur la fiche élève */
+.courbe-notes{list-style:none;margin:0;padding:0;display:flex;gap:.6rem;align-items:flex-end;overflow-x:auto;min-height:150px}
+.courbe-notes li{display:flex;flex-direction:column;align-items:center;gap:.2rem;min-width:3.4rem;font-size:.8rem}
+.barre-note{display:block;width:1.6rem;height:100px;background:linear-gradient(to top,var(--c,var(--p)) var(--h),#EEF0F4 var(--h));
+  border-radius:6px 6px 2px 2px;transform-origin:bottom;animation:pousser .5s ease-out}
+.barre-note.vert{--c:var(--vert)}.barre-note.orange{--c:var(--orange)}.barre-note.rouge{--c:var(--rouge)}.barre-note.gris{--c:#C9CED8}
+.courbe-notes strong{font-family:var(--titre);color:var(--p)}
+@keyframes pousser{from{transform:scaleY(.2)}to{transform:none}}
+
+/* Impression : le bulletin seul, sur une page */
+@media print{
+  body{background:#fff}
+  .pied,.flash,.onglets,.barre-filtres,.nav,.titre-page{display:none!important}
+  main{padding:0;max-width:none}
+  .bulletin{box-shadow:none;border:1px solid #bbb;border-top:4px solid #C9A43A;max-width:none;margin:0;break-inside:avoid}
+  .bulletin-synthese{background:#fff}
+  .badge{border:1px solid currentColor}
+  @page{margin:12mm}
+}
+@media(max-width:620px){
+  .note-criteres{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem}
+  .note-champ{flex-direction:column;align-items:stretch;text-align:center;gap:.1rem}
+  .note-champ span{width:auto}
+  .note-champ input{width:100%;font-size:17px;padding:.55rem .2rem}
+  .note-total{grid-column:1 / span 2;text-align:left}
+  .note-niveau{grid-column:3 / span 2;text-align:right}
+}
+.etiquette{text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--or-fonce)}
+
+/* v2.6 — Annuaire d'urgence */
+.annuaire-tete{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;margin-bottom:.3rem}
+.annuaire-tete h2{margin:0;border:0;padding:0}
+.annuaire-prof{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.92rem;color:var(--gris)}
+.annuaire{list-style:none;margin:.4rem 0 0;padding:0}
+.annuaire li{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;
+  padding:.55rem 0;border-top:1px solid var(--bord)}
+.annuaire-nom{display:flex;flex-direction:column}
+.annuaire-nom a{text-decoration:none;color:var(--texte)}
+.annuaire-tel{display:flex;gap:.35rem;flex-wrap:wrap}
+.bouton-appel{background:var(--p-clair);border-color:#CFD9E7;color:var(--p);font-variant-numeric:tabular-nums}
+.bouton-appel:hover{background:#DCE4F0}
+@media(max-width:600px){.annuaire-tel .bouton{padding:.55rem .7rem}}
+
+/* ---- Finances (v3.0) ---- */
+.badge.bleu{background:var(--bleu-clair);color:#1e3a8a}
+.badge.rouge-plein{background:var(--rouge);color:#fff}
+.petit-texte{font-size:.8rem}
+.tableau-finances td{vertical-align:top}
+.detail-famille>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:.1rem}
+.detail-famille>summary::-webkit-details-marker{display:none}
+.detail-famille>summary strong{color:var(--p-fonce)}
+.detail-famille>summary span{font-size:.8rem}
+.detail-famille[open]{min-width:300px}
+.detail-famille .tableau{margin-top:.4rem;background:#fafbfb;border-radius:8px}
+.liste-fin{margin:.5rem 0 0;padding-left:1.1rem;font-size:.85rem}
+.liste-fin li{margin:.15rem 0}
+.depliant-section .tableau{margin:.4rem 0 .8rem}
+/* Finances v3.1 */
+details.signaler{display:inline-block;position:relative}
+details.signaler>summary{list-style:none}
+details.signaler>summary::-webkit-details-marker{display:none}
+.form-signaler{position:absolute;right:0;top:110%;z-index:5;display:grid;gap:.4rem;width:250px;
+  background:var(--surface);border:1px solid var(--bord);border-radius:10px;padding:.6rem;box-shadow:var(--ombre)}
+.form-signaler input{font-size:.85rem;padding:.4rem .5rem}
+/* Envoi v3.2 : case « À envoyer » par élève */
+.case-envoi{display:inline-flex;align-items:center;gap:.3rem;margin-right:.6rem;font-size:.82rem;font-weight:600;color:var(--p-fonce)}
+.case-envoi input{width:auto;margin:0}
+.carte-message.non-selectionne{opacity:.6}
+.carte-message.non-selectionne .corps-message{display:none}
+
+.code-sql{white-space:pre-wrap;font-size:.8rem;background:#f5f6f8;border:1px solid #e1e4e8;border-radius:6px;padding:.6rem;overflow-x:auto;user-select:all}
+
+/* v3.9 — suivi des absences, communication, bouton retour */
+.selecteur-semaines label{display:flex;align-items:center;gap:.4rem;font-weight:600;margin:0}
+.selecteur-semaines select{width:auto}
+.bloc-suivi-absences .tuiles{margin:.6rem 0}
+.barre-retour{display:flex;gap:.5rem;margin:2rem 0 .5rem;padding-top:1rem;border-top:1px solid #e5e7eb}
+.bouton-discret{background:transparent;border-color:transparent;color:#6b7280}
+.liste-comm{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
+.liste-comm li a{display:block;padding:.75rem .9rem;border:1px solid #e5e7eb;border-radius:10px;background:#fff;color:inherit;text-decoration:none}
+.liste-comm li.non-lu a{border-left:4px solid #e63946;background:#fff8f8}
+.liste-comm .apercu{margin-top:.25rem;color:#374151}
+.fil-comm{list-style:none;margin:0 0 1rem;padding:0;display:grid;gap:.6rem}
+.bulle-comm{max-width:680px;padding:.6rem .8rem;border-radius:12px;background:#f3f4f6}
+.bulle-comm.admin{background:#eaf2fb}
+.bulle-comm.moi{margin-left:auto;background:#e8f6ee}
+.bulle-entete{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;font-size:.85rem;margin-bottom:.25rem}
+.bulle-texte{white-space:normal;line-height:1.45}
+
+/* ---------- Logo C.L.E.F. (v3.10) ---------- */
+.marque-icone{width:40px;height:40px;background:#fff;border-radius:10px;padding:2px;
+  display:block;overflow:hidden;box-shadow:0 0 0 1.5px var(--or, #C9A43A)}
+.logo-icone{display:block;width:100%;height:100%;object-fit:contain}
+.logo-clef{display:block;max-width:100%;height:auto}
+.logo-connexion{width:auto;height:auto;background:none;border-radius:0;margin:0 auto .9rem;display:block}
+.logo-connexion .logo-clef{width:min(240px,70vw);margin:0 auto}
+.bulletin-marque{width:120px;height:auto;flex:none}
+@media print{
+  .bulletin-marque{width:34mm}
+  .marque-icone{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+
+/* ---------- Séance en trois onglets : Appel / Devoir / Bilans (v3.11) ---------- */
+.onglets-seance{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem;margin:0 0 1rem;
+  padding:.3rem;background:var(--surface);border:1px solid var(--bord);border-radius:14px}
+.onglet-seance{font:inherit;font-weight:600;font-size:.98rem;border:0;border-radius:10px;padding:.7rem .4rem;
+  background:transparent;color:var(--gris);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.35rem}
+.onglet-seance .os-num{display:inline-grid;place-items:center;width:1.45rem;height:1.45rem;border-radius:50%;
+  border:1.5px solid currentColor;font-size:.8rem;line-height:1}
+.onglet-seance.fait{color:var(--p-fonce)}
+.onglet-seance.fait .os-num{background:var(--or-clair, #F1DC9A);border-color:var(--or, #C9A43A);color:var(--p-fonce)}
+.onglet-seance.actif{background:var(--p);color:#fff}
+.onglet-seance.actif .os-num{border-color:#fff;background:transparent;color:#fff}
+.onglet-seance:focus-visible{outline:2px solid var(--or, #C9A43A);outline-offset:2px}
+.panneau-seance.cachee{display:none}
+.barre-etape{justify-content:stretch}
+.bouton-etape{flex:1 1 220px;padding:.95rem 1rem;font-size:1.05rem}
+.aide-etape{text-align:center;margin-top:.45rem}
+.observation-interne{margin:.2rem 0 .4rem;padding:.6rem .8rem;border:1px dashed var(--bord);border-radius:10px}
+.observation-interne summary{cursor:pointer;font-weight:600;color:var(--p-fonce)}
+.observation-interne[open] summary{margin-bottom:.5rem}
+.liste-bilans .eleve-haut .lien-commentaire{margin:0 0 0 auto;flex:none;border:1px solid var(--bord);
+  background:var(--surface);padding:.35rem .7rem;border-radius:999px}
+.liste-bilans .lien-commentaire.rempli{border-color:var(--or, #C9A43A);background:#fff8ea}
+.ligne-bilan.eleve-absent{opacity:.6}
+@media (max-width:420px){
+  .onglet-seance{font-size:.9rem;padding:.65rem .2rem}
+}
+
+/* ---------- Absents du jour (supervision) ---------- */
+.liste-absents{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
+.liste-absents li{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .8rem;padding:.6rem .75rem;
+  border:1px solid var(--bord);border-radius:10px;background:var(--surface)}
+.liste-absents .abs-qui{flex:1 1 220px;min-width:0}
+.liste-absents .abs-qui small{display:block;color:var(--gris)}
+.liste-absents .abs-actions{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.liste-absents li.contacte{opacity:.65;background:#f3f7f2}
+.liste-absents .abs-ok{color:#2e7d4f;font-weight:600;font-size:.88rem}
+.barre-etape .bouton-whatsapp{flex:1 1 220px;padding:.95rem 1rem;font-size:1.05rem;text-align:center}
+/* Pied de page : le petit logo remplace l'étoile */
+.pied::before{background:url(img/icone-192.png) center/contain no-repeat;width:26px;height:26px;border-radius:6px;opacity:.85}
+/* Choix du devoir : progression ou devoir personnel */
+.onglets-devoir{display:flex;gap:.3rem;margin:.2rem 0 .6rem;padding:.2rem;background:#f4efe2;border-radius:999px;width:fit-content;max-width:100%}
+.onglet-dv{font:inherit;font-size:.9rem;font-weight:600;border:0;border-radius:999px;padding:.45rem .9rem;
+  background:transparent;color:var(--gris);cursor:pointer}
+.onglet-dv.actif{background:#fff;color:var(--p-fonce);box-shadow:0 1px 3px rgba(29,53,87,.18)}
+.onglet-dv:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- Historique des absences (v3.12) ---------- */
+.form-historique{display:flex;flex-wrap:wrap;gap:.6rem .8rem;align-items:flex-end}
+.form-historique label{display:flex;flex-direction:column;gap:.2rem;font-size:.85rem;font-weight:600;color:var(--p-fonce)}
+.form-historique input,.form-historique select{min-width:9rem}
+.raccourcis-periode{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.8rem}
+.tableau-historique td{vertical-align:top}
+.form-justif-ligne{flex-wrap:nowrap}
+.form-justif-ligne input[type=text]{width:9.5rem;min-width:0}
+@media (max-width:640px){
+  .form-historique label{flex:1 1 45%}
+  .form-historique input,.form-historique select{min-width:0;width:100%}
+  .form-justif-ligne{flex-wrap:wrap}
+}
+
+/* ---------- Espace familles : signaler une absence (v3.12) ---------- */
+.form-absence-famille{display:grid;gap:.8rem;max-width:30rem}
+.form-absence-famille label{display:flex;flex-direction:column;gap:.25rem;font-weight:600;color:var(--p-fonce)}
+.signalee{display:block;color:#1f5f9a;font-size:.82rem;font-weight:600}
+.badge-decrochage{background:#7c1d1d;color:#fff;border-radius:999px;padding:.1rem .5rem;font-size:.75rem;font-weight:700;margin-left:.3rem}
+.actions-ligne{white-space:nowrap}
+.actions-ligne .bouton{margin-left:.25rem}
+.sous-titre{font-size:1rem;margin:1rem 0 .4rem;color:var(--p-fonce)}
+/* Lot de bulletins : un par page à l'impression (v3.12) */
+.lot-bulletins .bulletin{margin-bottom:1.5rem}
+@media print{ .lot-bulletins .bulletin + .bulletin{break-before:page;page-break-before:always} }
+/* Version d'essai : bandeau bien visible (constante APP_ESSAI dans inc/config.php) */
+.bandeau-essai{background:repeating-linear-gradient(45deg,#c2410c,#c2410c 14px,#9a3412 14px,#9a3412 28px);color:#fff;
+  text-align:center;font-weight:700;font-size:.85rem;padding:.3rem .5rem;letter-spacing:.02em}
+.ratio{font-weight:700}.ratio.vert{color:#1e7a46}.ratio.orange{color:#b45309}.ratio.rouge{color:#b91c1c}
+
+/* ---------- Tuiles dépliables (v3.14) ---------- */
+button.tuile{font:inherit;text-align:left;cursor:pointer;width:100%;color:inherit}
+.tuile-depliable{transition:transform .12s ease, box-shadow .12s ease}
+.tuile-depliable:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(29,53,87,.12)}
+.tuile-depliable:focus-visible{outline:2px solid var(--or, #C9A43A);outline-offset:2px}
+.tuile-voir{display:block;margin-top:.35rem;font-style:normal;font-size:.75rem;font-weight:700;color:var(--p)}
+.tuile-voir::after{content:" ▾"}
+.tuile-depliable.ouverte{border-color:var(--p);box-shadow:0 0 0 2px var(--p) inset}
+.tuile-depliable.ouverte .tuile-voir::after{content:" ▴"}
+.panneau-tuile{margin:.4rem 0 1rem;padding:.8rem .9rem;border:1px solid var(--bord);border-radius:var(--rayon);background:#fff;
+  box-shadow:0 2px 10px rgba(29,53,87,.07)}
+.panneau-tete{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.5rem;color:var(--p-fonce)}
+.liste-panneau{list-style:none;margin:0;padding:0;max-height:26rem;overflow:auto}
+.liste-panneau li{display:grid;grid-template-columns:5.5rem minmax(9rem,1.2fr) minmax(8rem,1fr) auto;gap:.3rem .8rem;
+  align-items:center;padding:.5rem .2rem;border-bottom:1px solid #f0f2f3;font-size:.92rem}
+.liste-panneau li:last-child{border-bottom:0}
+.liste-panneau .lp-date{color:var(--gris);font-variant-numeric:tabular-nums}
+.liste-panneau .lp-nom{text-decoration:none;color:var(--p-fonce)}
+.liste-panneau .lp-groupe{color:var(--gris);font-size:.86rem}
+.liste-panneau .lp-etat{justify-self:end;text-align:right}
+@media (max-width:640px){
+  .liste-panneau li{grid-template-columns:1fr auto}
+  .liste-panneau .lp-date{grid-column:1 / -1;font-size:.8rem}
+  .liste-panneau .lp-groupe{grid-column:1 / -1}
+  .liste-panneau .lp-etat{grid-row:2;grid-column:2}
+}
+.liste-panneau.lp-eleves li{grid-template-columns:minmax(9rem,1.2fr) minmax(8rem,1fr) auto}
+@media (max-width:640px){
+  .liste-panneau.lp-eleves li{grid-template-columns:1fr auto}
+  .lp-eleves .lp-nom{grid-row:1;grid-column:1}
+  .lp-eleves .lp-etat{grid-row:1;grid-column:2}
+  .lp-eleves .lp-groupe{grid-row:2;grid-column:1 / -1}
+  .panneau-tete strong{font-size:.95rem}
+}
+.a-confirmer{display:inline-block;min-width:1.2rem;padding:0 .3rem;border-radius:999px;background:#fff1d6;color:#9a5a00;
+  font-weight:700;text-align:center;border:1px solid #f0c977}
+
+/* ---------- Appel des professeurs (v3.16) ---------- */
+.liste-appel-profs{list-style:none;margin:0;padding:0;display:grid;gap:.45rem}
+.liste-appel-profs li{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .8rem;padding:.6rem .75rem;
+  border:1px solid var(--bord);border-radius:10px;background:var(--surface)}
+.liste-appel-profs .ap-qui{flex:1 1 200px;min-width:0}
+.liste-appel-profs .ap-qui small{display:block;color:var(--gris)}
+.liste-appel-profs .ap-actions{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
+.liste-appel-profs .ap-actions select{font-size:.85rem;padding:.35rem .5rem;max-width:12rem}
+.liste-appel-profs li.ap-appel,.liste-appel-profs li.ap-present{background:#f3f8f4}
+.liste-appel-profs li.ap-a_confirmer{border-color:#f0c977}
+
+/* Relevé du personnel : chiffres centrés sous leur jour (v3.17) */
+.tableau-personnel th:not(:first-child),.tableau-personnel td:not(:first-child){text-align:center}
+.tableau-personnel td:not(:first-child) a{display:block;text-decoration:none;color:inherit}
+.tableau-personnel th:not(:first-child){min-width:3.4rem}
+.tableau-personnel td:last-child,.tableau-personnel th:last-child{text-align:right}
+.ligne-total td{border-top:2px solid var(--bord);background:#fafbfb}
+.controle-import{margin-top:.6rem;padding:.5rem .7rem;border-left:3px solid var(--or, #C9A43A);background:#fffaf0}
+.ref-parent{font-variant-numeric:tabular-nums;white-space:nowrap}
+.ref-parent a{font-weight:600;text-decoration:none;color:var(--p)}
+.ref-parent a:hover{text-decoration:underline}
+
+/* v3.20 — Suivi des échanges avec les familles */
+.liste-echanges{list-style:none;margin:0 0 1rem;padding:0;display:grid;gap:.55rem}
+.liste-echanges>li{padding:.7rem .85rem;border:1px solid var(--bord);border-left:4px solid var(--p,#1D3557);border-radius:10px;background:var(--surface,#fff)}
+.echange-tete{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.echange-date{font-weight:700;margin-right:.2rem}
+.echange-eleve{margin-left:auto;font-weight:600}
+.echange-texte{margin:.4rem 0 .3rem;line-height:1.45;overflow-wrap:anywhere}
+.details-echange{margin-top:.6rem}
+.details-echange>summary{list-style:none;cursor:pointer;display:inline-block}
+.details-echange>summary::-webkit-details-marker{display:none}
+.details-echange[open]>summary{margin-bottom:.8rem}
+.form-echange .barre-actions{align-items:center;gap:.6rem;flex-wrap:wrap}
+.form-echange .barre-actions .aide{margin:0}
+
+/* v3.24 — sur téléphone, un tableau large défile dans son cadre au lieu d'élargir
+   toute la page : les colonnes de grille peuvent rétrécir sous leur contenu. */
+.deux-colonnes>*,.form-grille>*,.semaine-grille>*,.tuiles>*,.liste-appel>*{min-width:0}
+.lien-souci{text-align:center;margin:1.2rem 0 .4rem;font-size:.82rem}
+.lien-souci a{color:var(--gris)}
+@media print{.lien-souci{display:none}}
+
+.ligne-alerte td{background:#fdf1f0}
+.detail-montant{font-size:.72rem;white-space:nowrap}
