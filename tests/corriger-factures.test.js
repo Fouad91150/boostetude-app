@@ -17,7 +17,7 @@ const pageConstruite = () => readFileSync(join(racine, "dist", "index.html"), "u
 
 const ELEVE = { ...eleveType, id: "e1", prenom: "Nour", nom: "Sebbar", tel: "06 12 34 56 78" };
 
-const rendreGerer = (factures) => {
+const rendreGerer = (factures, onglet = "gerer") => {
   const { ModuleFacturation } = chargerApp();
   const html = renderToStaticMarkup(React.createElement(ModuleFacturation, {
     eleves: [ELEVE], groupes: [], appels: {}, factures,
@@ -26,7 +26,7 @@ const rendreGerer = (factures) => {
     onDeleteFactureEnCours: async () => {}, onEmettreFacture: async () => "F2026-0001",
     onRecharger: async () => {}, onAjouterVersement: async () => {}, onSupprimerVersement: async () => {},
     onAnnulerFacture: async () => {}, onRetablirFacture: async () => {},
-    ongletInitial: "gerer"
+    ongletInitial: onglet
   }));
   return html;
 };
@@ -175,3 +175,31 @@ describe("La carte d'un élève et le total en cours", () => {
     assert.ok(!html.includes("200€"));
   });
 });
+
+describe("Onglet « Payées » séparé de « Gérer »", () => {
+  const factures = [
+    factureType({ id: "a", eleveId: "e1", numero: "F2026-0001", statut: "paye", montant: 90, encaisse: 90, datePaiement: "2026-10-02" }),
+    factureType({ id: "b", eleveId: "e1", numero: "F2026-0002", statut: "en_attente", montant: 75 }),
+    factureType({ id: "c", eleveId: "e1", numero: "F2026-0003", statut: "partiel", montant: 60, encaisse: 20 })
+  ];
+
+  test("« Gérer » ne montre plus les factures payées", () => {
+    const html = rendreGerer(factures, "gerer");
+    assert.ok(!html.includes("F2026-0001"), "la facture payée quitte Gérer");
+    assert.ok(html.includes("F2026-0002") && html.includes("F2026-0003"), "les factures dues y restent, acompte compris");
+  });
+
+  test("« Payées » les regroupe, avec leur total", () => {
+    const html = rendreGerer(factures, "payees");
+    assert.ok(html.includes("F2026-0001"));
+    assert.ok(!html.includes("F2026-0002"));
+    assert.ok(html.includes("90,00"), "total encaissé des factures soldées");
+  });
+
+  test("les compteurs des onglets suivent la séparation", () => {
+    const html = rendreGerer(factures, "gerer");
+    assert.ok(html.includes("Gérer (2)"));
+    assert.ok(html.includes("Payées (1)"));
+  });
+});
+

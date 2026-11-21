@@ -126,8 +126,8 @@ describe("Le message de relance", () => {
   test("il rappelle comment payer et signe", () => {
     const { makeRappelWhatsApp } = chargerApp();
     const t = makeRappelWhatsApp(ELEVE(), "F2026-0001", 90, [], 0);
-    assert.match(t, /virement bancaire ou espèces/);
-    assert.match(t, /Fouad Elmkhanter/);
+    assert.match(t, /espèces au cours, virement bancaire ou Wero/);
+    assert.match(t, /Boost'Étude$/m);
   });
 });
 

@@ -143,7 +143,9 @@ describe("Écran de règlement", () => {
     const html = rendre(factureType({ montant: 90, encaisse: 0, nbSeances: 3 }), []);
     assert.ok(html.includes("Espèces"));
     assert.ok(html.includes("Virement"));
-    assert.ok(html.includes("Chèque"));
+    assert.ok(html.includes("Wero"));
+    assert.ok(!html.includes("Chèque"));
+    assert.ok(!html.includes("Carte bancaire"));
   });
 
   test("chaque versement reçu peut être retiré", () => {

@@ -19,22 +19,23 @@ const preparer = ({ stripe = "https://buy.stripe.com/test_abc", pdf = "https://x
 };
 
 describe("Envoi au parent en un geste", () => {
-  test("le message porte le lien du PDF et le lien de paiement, et s'ouvre chez le bon parent", async () => {
+  test("le message porte le lien du PDF, sans paiement par carte, et s'ouvre chez le bon parent", async () => {
     const { app, appels } = preparer();
     const fenetre = {};
     const r = await app.envoyerAuParent({ facture: FACTURE, eleve: ELEVE, parametres: { ...parametresComplets, wero: "07 44 94 45 02" }, seuil: 3, fenetre });
-    assert.equal(appels.stripe, 1);
+    assert.equal(appels.stripe, 0, "plus de lien Stripe (21/11/2026)");
     assert.equal(appels.pdf, 1);
     assert.ok(fenetre.location.startsWith("https://wa.me/33612345678?text="), "conversation du parent");
     const texte = decodeURIComponent(fenetre.location.split("?text=")[1]);
-    assert.match(texte, /buy\.stripe\.com\/test_abc/);
+    assert.doesNotMatch(texte, /stripe|carte/i);
     assert.match(texte, /factures\/F2026-0007-ab\.pdf/);
-    assert.match(texte, /Wero \(07 44 94 45 02\)/);
+    assert.match(texte, /espèces au cours, virement bancaire ou Wero \(07 44 94 45 02\)/);
+    assert.doesNotMatch(texte, /chèque/i);
     assert.doesNotMatch(texte, /jointe en PDF/, "rien n'est joint : c'est un lien");
     assert.deepEqual(r.soucis, []);
   });
 
-  test("si Stripe échoue, le message part quand même avec le PDF, et le souci est dit", async () => {
+  test("Stripe n'est même plus appelé : aucun souci possible de ce côté", async () => {
     const { app } = preparer({ stripeEchoue: true });
     const fenetre = {};
     const r = await app.envoyerAuParent({ facture: FACTURE, eleve: ELEVE, parametres: parametresComplets, seuil: 3, fenetre });
@@ -42,7 +43,7 @@ describe("Envoi au parent en un geste", () => {
     assert.match(texte, /factures\/F2026-0007/);
     assert.doesNotMatch(texte, /stripe/);
     assert.match(texte, /virement/);
-    assert.equal(r.soucis.length, 1);
+    assert.equal(r.soucis.length, 0);
   });
 
   test("une facture soldée ne demande pas de lien de paiement", async () => {
@@ -51,25 +52,26 @@ describe("Envoi au parent en un geste", () => {
     assert.equal(appels.stripe, 0);
   });
 
-  test("la relance annonce le reste dû et porte les mêmes liens", async () => {
+  test("la relance annonce le reste dû, avec le PDF et sans carte", async () => {
     const { app } = preparer();
     const fenetre = {};
     await app.envoyerAuParent({ facture: { ...FACTURE, encaisse: 40 }, eleve: ELEVE, parametres: parametresComplets, fenetre, relance: true });
     const texte = decodeURIComponent(fenetre.location.split("?text=")[1]);
     assert.match(texte, /Reste à régler : 50 €/);
-    assert.match(texte, /buy\.stripe\.com/);
+    assert.match(texte, /factures\/F2026-0007/);
+    assert.doesNotMatch(texte, /stripe/i);
   });
 });
 
 describe("Le bouton unique sur la carte de l'élève", () => {
-  test("une facture émise affiche « Envoyer sur WhatsApp — PDF + paiement en ligne »", async () => {
+  test("une facture émise affiche « Envoyer sur WhatsApp — avec la facture PDF »", async () => {
     const React = (await import("react")).default;
     const { renderToStaticMarkup } = await import("react-dom/server");
     const { PanneauEnvoi } = chargerApp();
     const html = renderToStaticMarkup(React.createElement(PanneauEnvoi, {
       eleve: ELEVE, mois: "F2026-0007", nb: 3, montant: 90, dates: FACTURE.datesSeances,
       type: "facture", facture: FACTURE, parametres: parametresComplets, seuil: 3 }));
-    assert.ok(html.includes("PDF + paiement en ligne"));
+    assert.ok(html.includes("avec la facture PDF"));
   });
   test("un brouillon ne l'affiche pas", async () => {
     const React = (await import("react")).default;
@@ -78,6 +80,6 @@ describe("Le bouton unique sur la carte de l'élève", () => {
     const html = renderToStaticMarkup(React.createElement(PanneauEnvoi, {
       eleve: ELEVE, mois: "depuis…", nb: 3, montant: 90, dates: FACTURE.datesSeances,
       type: "facture", facture: { ...FACTURE, numero: null }, parametres: parametresComplets, seuil: 3 }));
-    assert.ok(!html.includes("PDF + paiement en ligne"));
+    assert.ok(!html.includes("avec la facture PDF"));
   });
 });

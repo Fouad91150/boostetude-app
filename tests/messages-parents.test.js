@@ -5,6 +5,7 @@
  */
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { chargerApp, eleveType, factureType, parametresComplets } from "./charger-app.js";
@@ -26,8 +27,8 @@ describe("Moyens de paiement", () => {
 
   test("Wero est toujours proposé, avec son numéro s'il est renseigné", () => {
     const { MOYENS_PAIEMENT_TEXTE } = chargerApp();
-    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, { wero: "07 44 94 45 02" }), /Wero \(07 44 94 45 02\), virement/);
-    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, {}), /Wero, virement bancaire ou espèces/);
+    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, { wero: "07 44 94 45 02" }), /espèces au cours, virement bancaire ou Wero \(07 44 94 45 02\)/);
+    assert.match(MOYENS_PAIEMENT_TEXTE(eleveType, {}), /espèces au cours, virement bancaire ou Wero\./);
   });
 
   test("le nom de l'enfant sert de référence au virement", () => {
@@ -93,7 +94,7 @@ describe("Message WhatsApp", () => {
   test("il annonce la pièce jointe et signe", () => {
     const t = wa();
     assert.match(t, /jointe en PDF/);
-    assert.match(t, /Fouad Elmkhanter/);
+    assert.match(t, /Boost'Étude$/m);
   });
 });
 
@@ -117,7 +118,8 @@ describe("Message SMS", () => {
   test("le rappel de paiement propose aussi les trois moyens", () => {
     const { makeRappelSMS } = chargerApp();
     const t = makeRappelSMS(eleveType, "septembre", 75);
-    assert.match(t, /Espèces, chèque ou virement/);
+    assert.match(t, /Espèces, virement ou Wero/);
+    assert.doesNotMatch(t, /chèque/i);
     assert.match(t, /Lucas Martin/);
   });
 });
@@ -197,5 +199,14 @@ describe("Seuil de facturation", () => {
       parametres: { ...parametresComplets, seuil_facturation: 3 }
     }));
     assert.ok(!html.includes("à envoyer"), "elle attend un paiement, pas une émission");
+  });
+});
+
+describe("Signatures : Boost'Étude seulement (21/11/2026)", () => {
+  test("aucun message ne porte le nom de l'exploitant", () => {
+        for (const f of ["06-messages.js", "19d-bilans.js", "19e-remunerations.js", "09b-alerte-absences.js"]) {
+      const src = readFileSync(new URL("../src/app/" + f, import.meta.url), "utf8");
+      assert.ok(!/El ?Mkhanter/i.test(src), f);
+    }
   });
 });

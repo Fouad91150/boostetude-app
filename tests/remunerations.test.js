@@ -157,7 +157,7 @@ describe("Le récapitulatif envoyé au professeur", () => {
     assert.match(t, /2 séances de 2 h, soit \*4 h\*/);
     assert.match(t, /25 €\/h/);
     assert.match(t, /Total : 100 €/);
-    assert.match(t, /Fouad Elmkhanter/);
+    assert.match(t, /Boost'Étude$/m);
   });
 });
 

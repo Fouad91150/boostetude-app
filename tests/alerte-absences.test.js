@@ -75,7 +75,7 @@ describe("Messages aux parents", () => {
     assert.match(m.corps, /Bonjour Marie Martin/);
     assert.match(m.corps, /3 séances sans justificatif/);
     assert.match(m.corps, /29 septembre 2026/);
-    assert.match(m.corps, /Fouad Elmkhanter/);
+    assert.match(m.corps, /Boost'Étude$/m);
   });
 
   test("le SMS reste court", () => {
