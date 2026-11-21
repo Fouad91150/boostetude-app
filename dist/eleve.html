@@ -62,6 +62,10 @@ input:focus { border-color: var(--or); box-shadow: 0 0 0 3px rgba(212,175,55,.2)
 .nav button { flex: 1; padding: 13px; border-radius: 12px; border: 0; font-weight: 700; background: var(--or); color: var(--nuit); cursor: pointer; }
 .nav button:disabled { opacity: .35; }
 .nav .compteur { min-width: 70px; text-align: center; font-weight: 700; }
+.sous-titre { color: #fff; background: rgba(10,20,40,.92); font-size: 15px; line-height: 1.45; padding: 10px 14px; text-align: center; min-height: 0; }
+.sous-titre:empty { display: none; }
+.barre button.ecoute { background: var(--or); color: var(--nuit); border-color: var(--or); font-weight: 700; }
+.barre button.ecoute.en-cours { background: #fff; }
 .astuce { color: #c9cfdb; font-size: 12px; text-align: center; padding: 6px 12px 0; }
 .chargement { color: #c9cfdb; text-align: center; padding: 40px; }
 @media (orientation: landscape) and (max-height: 500px) { .astuce { display: none; } .barre, .nav { padding-top: 5px; padding-bottom: 5px; } .nav button, .barre button { padding: 7px 10px; } .scene { padding: 4px; } }
@@ -82,10 +86,12 @@ input:focus { border-color: var(--or); box-shadow: 0 0 0 3px rgba(212,175,55,.2)
   <div class="barre">
     <button id="lFermer" aria-label="Fermer">✕</button>
     <div class="titre" id="lTitre"></div>
+    <button id="lEcoute" class="ecoute" hidden>🔊 Écouter</button>
     <button id="lMode">Tout dérouler</button>
   </div>
   <div class="astuce" id="lAstuce">Tourne ton téléphone pour voir les diapos en grand · glisse vers la gauche ou la droite</div>
   <div class="scene" id="lScene"></div>
+  <div class="sous-titre" id="lSousTitre" aria-live="polite"></div>
   <div class="nav" id="lNav">
     <button id="lPrec">‹ Précédente</button>
     <div class="compteur" id="lCompteur"></div>
@@ -154,7 +160,7 @@ async function accueil() {
     return ecranConnexion("Ce compte n'est pas un compte élève.");
   }
   const { data: docs, error } = await sb.from("documents")
-    .select("id,titre,niveau,matiere,url,ordre,nb_pages").order("matiere").order("ordre").order("titre");
+    .select("id,titre,niveau,matiere,url,ordre,nb_pages,narration").order("matiere").order("ordre").order("titre");
   if (error) { vue.innerHTML = `<div class="carte erreur">Impossible de charger les cours : ${esc(error.message)}</div>`; return; }
   const parMatiere = {};
   (docs || []).forEach(d => { (parMatiere[d.matiere || "Cours"] ||= []).push(d); });
@@ -163,7 +169,7 @@ async function accueil() {
     <div class="liste">${l.map((d, i) => `
       <button class="cours" data-id="${esc(d.id)}">
         <span class="num">${i + 1}</span>
-        <span><div class="t">${esc(d.titre)}</div><div class="m">${d.nb_pages ? d.nb_pages + " diapos" : "Cours"}</div></span>
+        <span><div class="t">${esc(d.titre)}</div><div class="m">${d.nb_pages ? d.nb_pages + " diapos" : "Cours"}${Array.isArray(d.narration) && d.narration.length ? " · 🔊 cours expliqué à l'oral" : ""}</div></span>
         <span class="fl">›</span>
       </button>`).join("")}
     </div>`).join("");
@@ -175,8 +181,11 @@ async function accueil() {
 }
 
 // ─── Lecteur de diapos ───────────────────────────────────────
-const L = { pdf: null, page: 1, n: 0, defile: false, rendu: 0 };
+const L = { pdf: null, page: 1, n: 0, defile: false, rendu: 0, doc: null };
 async function ouvrirCours(doc) {
+  L.doc = doc;
+  arreterVoix();
+  $("#lEcoute").hidden = !(Array.isArray(doc.narration) && doc.narration.length && "speechSynthesis" in window);
   $("#lecteur").classList.add("ouvert");
   document.body.style.overflow = "hidden";
   $("#lTitre").textContent = doc.titre;
@@ -191,6 +200,7 @@ async function ouvrirCours(doc) {
   afficher();
 }
 function fermerCours() {
+  arreterVoix();
   $("#lecteur").classList.remove("ouvert");
   document.body.style.overflow = "";
   if (L.pdf) { L.pdf.destroy(); L.pdf = null; }
@@ -234,10 +244,69 @@ async function afficher() {
     $("#lSuiv").disabled = L.page >= L.n;
   }
 }
-const aller = d => { if (!L.pdf || L.defile) return; const p = Math.min(L.n, Math.max(1, L.page + d)); if (p !== L.page) { L.page = p; afficher(); } };
+const aller = d => {
+  if (!L.pdf || L.defile) return;
+  const p = Math.min(L.n, Math.max(1, L.page + d));
+  if (p !== L.page) { L.page = p; afficher(); if (V.actif) lireDiapo(); }
+};
 $("#lPrec").onclick = () => aller(-1);
 $("#lSuiv").onclick = () => aller(1);
-$("#lMode").onclick = () => { L.defile = !L.defile; afficher(); };
+$("#lMode").onclick = () => { if (!L.defile) arreterVoix(); L.defile = !L.defile; afficher(); };
+
+// ─── Explication orale ───────────────────────────────────────
+// Le texte de chaque diapo est lu par la voix française du téléphone ; à la
+// fin d'une diapo, on passe tout seul à la suivante. Lu phrase par phrase :
+// certains navigateurs coupent une lecture trop longue.
+const V = { actif: false, jeton: 0, voix: null };
+const choisirVoix = () => {
+  const toutes = speechSynthesis.getVoices().filter(v => /^fr(-|_|$)/i.test(v.lang));
+  const pref = ["Google français", "Amélie", "Thomas", "Audrey", "Denise", "Henri", "Marie", "Daniel"];
+  return toutes.find(v => pref.some(n => v.name.includes(n)) && /fr-FR/i.test(v.lang))
+      || toutes.find(v => /fr-FR/i.test(v.lang)) || toutes[0] || null;
+};
+if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => { V.voix = choisirVoix(); };
+function arreterVoix() {
+  V.actif = false; V.jeton++;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  $("#lSousTitre").textContent = "";
+  const b = $("#lEcoute"); b.textContent = "🔊 Écouter"; b.classList.remove("en-cours");
+}
+function lireDiapo() {
+  const texte = (L.doc && L.doc.narration || [])[L.page - 1];
+  const jeton = ++V.jeton;
+  speechSynthesis.cancel();
+  if (!texte) { $("#lSousTitre").textContent = ""; return; }
+  const phrases = texte.match(/[^.!?…]+[.!?…]*\s*/g) || [texte];
+  V.voix = V.voix || choisirVoix();
+  let i = 0;
+  const suivante = () => {
+    if (jeton !== V.jeton || !V.actif) return;
+    if (i >= phrases.length) {
+      $("#lSousTitre").textContent = "";
+      if (L.page < L.n) { setTimeout(() => { if (jeton === V.jeton && V.actif) { L.page++; afficher(); lireDiapo(); } }, 700); }
+      else arreterVoix();
+      return;
+    }
+    const ph = phrases[i++].trim();
+    const u = new SpeechSynthesisUtterance(ph);
+    u.lang = "fr-FR"; if (V.voix) u.voice = V.voix; u.rate = 0.95;
+    u.onend = suivante;
+    u.onerror = e => {
+      if (e && (e.error === "interrupted" || e.error === "canceled")) return;
+      arreterVoix();
+      $("#lSousTitre").textContent = "La lecture à voix haute ne fonctionne pas sur cet appareil. Vérifie que le son est activé.";
+    };
+    $("#lSousTitre").textContent = ph;
+    speechSynthesis.speak(u);
+  };
+  suivante();
+}
+$("#lEcoute").onclick = () => {
+  if (V.actif) { arreterVoix(); return; }
+  V.actif = true;
+  const b = $("#lEcoute"); b.textContent = "⏸ Pause"; b.classList.add("en-cours");
+  lireDiapo();
+};
 $("#lFermer").onclick = () => history.back();
 window.addEventListener("popstate", () => { if ($("#lecteur").classList.contains("ouvert")) fermerCours(); });
 document.addEventListener("keydown", e => {
