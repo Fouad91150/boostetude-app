@@ -168,7 +168,10 @@ function App() {
     } = await api.fetchAll(role === "admin");
     const grp = gr.find(g => g.id === groupeId);
     if (grp && role === "admin") {
-      for (const eid of grp.eids || []) {
+      // Les élèves du groupe ET ceux qui figuraient sur la feuille : un élève
+      // retiré du groupe garde sinon, sur son brouillon, une séance qu'il n'a
+      // pas suivie (cas de Maroua, 14/10).
+      for (const eid of new Set([...(grp.eids || []), ...Object.keys(presMap || {})])) {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);

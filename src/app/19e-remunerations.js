@@ -63,7 +63,7 @@ const makeRemunerationWhatsApp = (prof, ym, seances, heures, montant, taux) =>
   `• ${montantTxt(taux)}/h\n` +
   `• *Total : ${montantTxt(montant)}*\n\n` +
   `Merci pour ton travail de ce mois-ci.\n` +
-  `Fouad Elmkhanter — Boost'Étude`;
+  `Boost'Étude`;
 
 function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial }) {
   const [mois, setMois] = useState(moisInitial || nowYM());

@@ -319,11 +319,6 @@ function construireFacturePDF(facture, eleve, parametres) {
       { taille: 9, couleur: [0.18, 0.49, 0.31] });
     y += 13;
   } else {
-    if (facture.stripeUrl) {
-      page.texte(M, y + 2, "Payer en ligne par carte bancaire :", { taille: 9, gras: true, couleur: NOIR });
-      page.texte(M, y + 14, facture.stripeUrl, { taille: 9, couleur: NAVY_PDF });
-      y += 26;
-    }
     y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve, p), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
     y += 2;
     if (p.iban) {

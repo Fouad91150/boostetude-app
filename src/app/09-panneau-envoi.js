@@ -179,7 +179,7 @@ function PanneauEnvoi({
         padding: "13px 10px", color: "#fff", fontSize: 14.5, fontWeight: 700, marginBottom: 6,
         cursor: envoiUnique ? "wait" : "pointer", fontFamily: "inherit", opacity: envoiUnique ? 0.6 : 1
       }
-    }, envoiUnique ? "Préparation…" : (type === "rappel" ? "📤 Relancer sur WhatsApp — PDF + paiement en ligne" : "📤 Envoyer sur WhatsApp — PDF + paiement en ligne")),
+    }, envoiUnique ? "Préparation…" : (type === "rappel" ? "📤 Relancer sur WhatsApp — avec la facture PDF" : "📤 Envoyer sur WhatsApp — avec la facture PDF")),
     unGeste && h("div", { style: { fontSize: 11, color: C.gray, textAlign: "center", marginBottom: 10 } },
       "Autres moyens ci-dessous (texte seul, sans liens)"),
 

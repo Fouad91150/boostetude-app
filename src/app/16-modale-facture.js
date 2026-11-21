@@ -8,7 +8,7 @@
 // soldée. C'est la base qui fait ce calcul, pour qu'il soit le même partout.
 // La carte passe par Stripe et s'enregistre d'elle-même ; elle reste saisissable
 // à la main pour un paiement reçu autrement (terminal, lien ancien).
-const MODES_REGLEMENT = ["Espèces", "Virement", "Wero", "Carte bancaire"];
+const MODES_REGLEMENT = ["Espèces", "Virement", "Wero"];
 
 function ModaleFacture({
   eleve,
@@ -190,7 +190,7 @@ function ModaleFacture({
         h(InputText, {
           label: "Note (visible sur la facture)",
           value: notes, onChange: setNotes,
-          placeholder: "Chèque remis le 3, encaissé le 10…"
+          placeholder: "Espèces remises au cours du 3…"
         }),
         notes !== (existante?.notes ?? "") && h(BtnSecondary, { label: "Enregistrer la note", onClick: enregistrerNotes, full: true }))
     ));

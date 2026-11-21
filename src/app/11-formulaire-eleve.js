@@ -206,7 +206,7 @@ function FormulaireEleve({
     label: "Mode de paiement",
     value: mp,
     onChange: setMp,
-    options: ["Virement", "Espèces", "Chèque"]
+    options: ["Espèces", "Virement", "Wero"]
   })), /*#__PURE__*/React.createElement(InputArea, {
     label: "Notes",
     value: notes,

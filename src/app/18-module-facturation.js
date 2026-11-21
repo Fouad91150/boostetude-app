@@ -177,6 +177,12 @@ function ModuleFacturation({
   // Onglet "Gérer" : toutes les factures (en cours + payées) au même endroit, pour un
   // nettoyage rapide (ex. des tests) sans avoir à jongler entre les deux autres onglets.
   const toutes = [...factures].sort((a, b) => (b.periodeFin || b.datePaiement || b.periodeDebut || "").localeCompare(a.periodeFin || a.datePaiement || a.periodeDebut || ""));
+  // « Gérer » ne garde que ce qui demande encore un geste ; les factures soldées
+  // ont leur propre onglet « Payées » (demande de Fouad, 12/11/2026).
+  const aGerer = toutes.filter(f => f.statut !== "paye");
+  const soldees = toutes.filter(f => f.statut === "paye")
+    .sort((a, b) => (b.datePaiement || "").localeCompare(a.datePaiement || ""));
+  const listeGestion = onglet === "payees" ? soldees : aGerer;
   const handleDeleteToutes = f => f.statut === "paye" ? handleDelete(f.id) : handleDeleteEnCours(f.id, f.eleveId, f.datesSeances || []);
   return /*#__PURE__*/React.createElement("div", null, toast && /*#__PURE__*/React.createElement("div", {
     className: "fx-pop-in",
@@ -232,7 +238,10 @@ function ModuleFacturation({
     l: "📋 Historique"
   }, {
     k: "gerer",
-    l: `🗑 Gérer${toutes.length > 0 ? ` (${toutes.length})` : ""}`
+    l: `🗑 Gérer${aGerer.length > 0 ? ` (${aGerer.length})` : ""}`
+  }, {
+    k: "payees",
+    l: `✅ Payées${soldees.length > 0 ? ` (${soldees.length})` : ""}`
   }].map(({
     k,
     l
@@ -740,27 +749,35 @@ function ModuleFacturation({
         fontFamily: "inherit"
       }
     }, "🗑"));
-  }))), onglet === "gerer" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }))), (onglet === "gerer" || onglet === "payees") && /*#__PURE__*/React.createElement("div", null, onglet === "payees" ? h("div", {
+    style: { background: C.greenPale, border: `1px solid ${C.greenBord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14,
+      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
+  }, h("div", { style: { fontSize: 12.5, color: C.texte, lineHeight: 1.5 } },
+      "Factures entièrement réglées, les plus récentes d'abord. Un versement mal saisi se retire depuis « 💰 Encaisser »."),
+    h("div", { style: { textAlign: "right", flexShrink: 0 } },
+      h("div", { style: { fontSize: 17, fontWeight: 800, color: C.green, fontFamily: FD } },
+        euros(soldees.reduce((t, f) => t + (Number(f.montant) || 0), 0))),
+      h("div", { style: { fontSize: 11, color: C.gray } }, `${soldees.length} facture${soldees.length > 1 ? "s" : ""}`))) : /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: C.gray,
       marginBottom: 14,
       lineHeight: 1.5
     }
-  }, "Toutes vos factures, et de quoi corriger une erreur : enregistrer un règlement, retirer un versement mal saisi, annuler une facture émise par erreur ou la rétablir. Supprimer un brouillon retire aussi les séances « présent » correspondantes de l'appel."), toutes.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Les factures pas encore réglées (brouillons, émises, acomptes, annulées), et de quoi corriger une erreur : enregistrer un règlement, retirer un versement mal saisi, annuler une facture émise par erreur ou la rétablir. Supprimer un brouillon retire aussi les séances « présent » correspondantes de l'appel."), listeGestion.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       padding: "40px 0",
       color: C.gray,
       fontSize: 13
     }
-  }, "Aucune facture pour l'instant."), /*#__PURE__*/React.createElement("div", {
+  }, onglet === "payees" ? "Aucune facture payée pour l'instant." : "Rien à gérer : toutes les factures sont réglées. 🎉"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
       gap: 8
     }
-  }, toutes.map(f => {
+  }, listeGestion.map(f => {
     const e = eleveDe(f.eleveId);
     const periode = f.numero || (f.periodeDebut ? `depuis ${fmtDateCourt(f.periodeDebut)}` : "");
     const emise = !!f.numero;

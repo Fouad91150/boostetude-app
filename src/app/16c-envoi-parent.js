@@ -18,13 +18,11 @@ const lienConversation = (canal, tel, texte) => canal === "sms"
 
 async function preparerLiens(facture, eleve, parametres) {
   const soucis = [];
-  let stripeUrl = null, pdfUrl = null;
-  if (resteDu(facture) > 0) {
-    try { stripeUrl = await api.lienPaiementStripe(facture.id); }
-    catch (e) { soucis.push("lien de paiement par carte (" + (e.message || e) + ")"); }
-  }
+  // Plus de paiement par carte en ligne (21/11/2026) : seul le PDF part en lien.
+  const stripeUrl = null;
+  let pdfUrl = null;
   try {
-    const blob = facturePDFBlob({ ...facture, stripeUrl: stripeUrl || facture.stripeUrl }, eleve, parametres);
+    const blob = facturePDFBlob({ ...facture, stripeUrl: null }, eleve, parametres);
     pdfUrl = await api.deposerFacturePDF(facture, eleve, blob);
   } catch (e) { soucis.push("lien du PDF (" + (e.message || e) + ")"); }
   return { stripeUrl, pdfUrl, soucis };

@@ -37,7 +37,7 @@ const makeBilanWhatsApp = (e, d) => {
   if (d.devoirs.length)     L.push(`📝 *Pour la prochaine séance* : ${phrase(d.devoirs.join(" "))}`);
   L.push("");
   L.push("Bonne fin de semaine,");
-  L.push("M. El Mkhanter — Boost'Étude");
+  L.push("Boost'Étude");
   return L.join("\n");
 };
 
@@ -48,7 +48,7 @@ const makeBilanSMS = (e, d) => {
   if (d.progres.length)     bouts.push(`Points forts : ${phrase(d.progres.join(" "))}`);
   if (d.difficultes.length) bouts.push(`À consolider : ${phrase(d.difficultes.join(" "))}`);
   if (d.devoirs.length)     bouts.push(`À faire : ${phrase(d.devoirs.join(" "))}`);
-  bouts.push("M. El Mkhanter, Boost'Étude");
+  bouts.push("Boost'Étude");
   return bouts.join(" ");
 };
 
@@ -69,7 +69,7 @@ const makeBilanEmail = (e, d) => ({
     "Je reste à votre disposition si vous souhaitez en échanger.",
     "",
     "Cordialement,",
-    "M. El Mkhanter — Boost'Étude"
+    "Boost'Étude"
   ].filter(x => x !== null).join("\n")
 });
 

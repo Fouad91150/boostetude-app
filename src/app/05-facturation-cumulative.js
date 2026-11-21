@@ -159,11 +159,17 @@ const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     const montant = montantSeances(dates, e.th);
-    // Ajout de séances, ou même nombre de séances mais montant à corriger
-    // (cours offert pas encore déduit). Jamais de séance retirée.
-    const aCorriger = brouillon && dates.length === actuel && Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004
-      && !(Number(brouillon.encaisse) > 0);
-    return dates.length > actuel || aCorriger ? { eid: e.id, dates, montant } : null;
+    // Le brouillon est réaligné sur l'appel dès qu'il en diffère : séance ajoutée,
+    // séance retirée de l'appel (élève inscrit par erreur dans un groupe), cours
+    // offert pas encore déduit. Un brouillon qui a déjà reçu de l'argent n'est
+    // pas touché : il se corrige à la main.
+    const cle = d => `${d.date}|${d.matiere || ""}|${d.offert ? 1 : 0}`;
+    const differe = brouillon && (
+      [...(brouillon.datesSeances || [])].map(cle).sort().join() !== dates.map(cle).sort().join()
+      || Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004);
+    if (brouillon && Number(brouillon.encaisse) > 0) return dates.length > actuel ? { eid: e.id, dates, montant } : null;
+    if (!brouillon) return dates.length ? { eid: e.id, dates, montant } : null;
+    return differe ? { eid: e.id, dates, montant } : null;
   })
   .filter(Boolean);
 
