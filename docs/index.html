@@ -72,8 +72,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.7.0";
-window.__APP_BUILD = "2026-10-14";
+<script>window.__APP_VERSION = "3.7.2";
+window.__APP_BUILD = "2026-11-12";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -1269,11 +1269,17 @@ const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     const montant = montantSeances(dates, e.th);
-    // Ajout de séances, ou même nombre de séances mais montant à corriger
-    // (cours offert pas encore déduit). Jamais de séance retirée.
-    const aCorriger = brouillon && dates.length === actuel && Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004
-      && !(Number(brouillon.encaisse) > 0);
-    return dates.length > actuel || aCorriger ? { eid: e.id, dates, montant } : null;
+    // Le brouillon est réaligné sur l'appel dès qu'il en diffère : séance ajoutée,
+    // séance retirée de l'appel (élève inscrit par erreur dans un groupe), cours
+    // offert pas encore déduit. Un brouillon qui a déjà reçu de l'argent n'est
+    // pas touché : il se corrige à la main.
+    const cle = d => `${d.date}|${d.matiere || ""}|${d.offert ? 1 : 0}`;
+    const differe = brouillon && (
+      [...(brouillon.datesSeances || [])].map(cle).sort().join() !== dates.map(cle).sort().join()
+      || Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004);
+    if (brouillon && Number(brouillon.encaisse) > 0) return dates.length > actuel ? { eid: e.id, dates, montant } : null;
+    if (!brouillon) return dates.length ? { eid: e.id, dates, montant } : null;
+    return differe ? { eid: e.id, dates, montant } : null;
   })
   .filter(Boolean);
 
@@ -5033,6 +5039,12 @@ function ModuleFacturation({
   // Onglet "Gérer" : toutes les factures (en cours + payées) au même endroit, pour un
   // nettoyage rapide (ex. des tests) sans avoir à jongler entre les deux autres onglets.
   const toutes = [...factures].sort((a, b) => (b.periodeFin || b.datePaiement || b.periodeDebut || "").localeCompare(a.periodeFin || a.datePaiement || a.periodeDebut || ""));
+  // « Gérer » ne garde que ce qui demande encore un geste ; les factures soldées
+  // ont leur propre onglet « Payées » (demande de Fouad, 12/11/2026).
+  const aGerer = toutes.filter(f => f.statut !== "paye");
+  const soldees = toutes.filter(f => f.statut === "paye")
+    .sort((a, b) => (b.datePaiement || "").localeCompare(a.datePaiement || ""));
+  const listeGestion = onglet === "payees" ? soldees : aGerer;
   const handleDeleteToutes = f => f.statut === "paye" ? handleDelete(f.id) : handleDeleteEnCours(f.id, f.eleveId, f.datesSeances || []);
   return /*#__PURE__*/React.createElement("div", null, toast && /*#__PURE__*/React.createElement("div", {
     className: "fx-pop-in",
@@ -5088,7 +5100,10 @@ function ModuleFacturation({
     l: "📋 Historique"
   }, {
     k: "gerer",
-    l: `🗑 Gérer${toutes.length > 0 ? ` (${toutes.length})` : ""}`
+    l: `🗑 Gérer${aGerer.length > 0 ? ` (${aGerer.length})` : ""}`
+  }, {
+    k: "payees",
+    l: `✅ Payées${soldees.length > 0 ? ` (${soldees.length})` : ""}`
   }].map(({
     k,
     l
@@ -5596,27 +5611,35 @@ function ModuleFacturation({
         fontFamily: "inherit"
       }
     }, "🗑"));
-  }))), onglet === "gerer" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }))), (onglet === "gerer" || onglet === "payees") && /*#__PURE__*/React.createElement("div", null, onglet === "payees" ? h("div", {
+    style: { background: C.greenPale, border: `1px solid ${C.greenBord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14,
+      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
+  }, h("div", { style: { fontSize: 12.5, color: C.texte, lineHeight: 1.5 } },
+      "Factures entièrement réglées, les plus récentes d'abord. Un versement mal saisi se retire depuis « 💰 Encaisser »."),
+    h("div", { style: { textAlign: "right", flexShrink: 0 } },
+      h("div", { style: { fontSize: 17, fontWeight: 800, color: C.green, fontFamily: FD } },
+        euros(soldees.reduce((t, f) => t + (Number(f.montant) || 0), 0))),
+      h("div", { style: { fontSize: 11, color: C.gray } }, `${soldees.length} facture${soldees.length > 1 ? "s" : ""}`))) : /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: C.gray,
       marginBottom: 14,
       lineHeight: 1.5
     }
-  }, "Toutes vos factures, et de quoi corriger une erreur : enregistrer un règlement, retirer un versement mal saisi, annuler une facture émise par erreur ou la rétablir. Supprimer un brouillon retire aussi les séances « présent » correspondantes de l'appel."), toutes.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Les factures pas encore réglées (brouillons, émises, acomptes, annulées), et de quoi corriger une erreur : enregistrer un règlement, retirer un versement mal saisi, annuler une facture émise par erreur ou la rétablir. Supprimer un brouillon retire aussi les séances « présent » correspondantes de l'appel."), listeGestion.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       padding: "40px 0",
       color: C.gray,
       fontSize: 13
     }
-  }, "Aucune facture pour l'instant."), /*#__PURE__*/React.createElement("div", {
+  }, onglet === "payees" ? "Aucune facture payée pour l'instant." : "Rien à gérer : toutes les factures sont réglées. 🎉"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
       gap: 8
     }
-  }, toutes.map(f => {
+  }, listeGestion.map(f => {
     const e = eleveDe(f.eleveId);
     const periode = f.numero || (f.periodeDebut ? `depuis ${fmtDateCourt(f.periodeDebut)}` : "");
     const emise = !!f.numero;
@@ -7665,7 +7688,10 @@ function App() {
     } = await api.fetchAll(role === "admin");
     const grp = gr.find(g => g.id === groupeId);
     if (grp && role === "admin") {
-      for (const eid of grp.eids || []) {
+      // Les élèves du groupe ET ceux qui figuraient sur la feuille : un élève
+      // retiré du groupe garde sinon, sur son brouillon, une séance qu'il n'a
+      // pas suivie (cas de Maroua, 14/10).
+      for (const eid of new Set([...(grp.eids || []), ...Object.keys(presMap || {})])) {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
