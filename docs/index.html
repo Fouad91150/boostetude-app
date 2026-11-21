@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.7.3";
+<script>window.__APP_VERSION = "3.7.4";
 window.__APP_BUILD = "2026-11-21";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
@@ -1296,10 +1296,10 @@ const SEUIL_FACTURATION_DEFAUT = 3;
 
 // Trois moyens acceptés. Pour un virement, le nom de l'enfant est indispensable :
 // sans lui, un virement arrive sans qu'on sache à qui le rattacher.
-// Moyens de règlement 2026-2027 : carte en ligne (Stripe), Wero, virement,
-// espèces — plus de chèque. Wero toujours cité ; son numéro s'ajoute s'il est renseigné dans Réglages.
+// Moyens de règlement (21/11/2026) : espèces, virement, Wero — ni carte en
+// ligne (Stripe) ni chèque. Wero toujours cité ; son numéro s'ajoute s'il est renseigné dans Réglages.
 const MOYENS_PAIEMENT_TEXTE = (e, p) =>
-  `Règlement au choix : Wero${p && p.wero ? ` (${p.wero})` : ""}, virement bancaire ou espèces au cours. ` +
+  `Règlement au choix : espèces au cours, virement bancaire ou Wero${p && p.wero ? ` (${p.wero})` : ""}. ` +
   `Pour un virement, merci d'indiquer « ${e.prenom} ${e.nom} » en référence.`;
 
 // Les deux liens qui font de l'envoi un seul geste : la facture PDF (un lien,
@@ -1308,7 +1308,7 @@ const MOYENS_PAIEMENT_TEXTE = (e, p) =>
 const blocLiens = liens => {
   const l = liens || {};
   return (l.pdfUrl ? `📄 *Votre facture (PDF)* :\n${l.pdfUrl}\n\n` : "") +
-         (l.stripeUrl ? `💳 *Payer en ligne par carte* :\n${l.stripeUrl}\n\n` : "");
+         "";
 };
 
 const mentionAutomatique = seuil =>
@@ -1334,7 +1334,7 @@ const makeFactureSMS = (e, mois, nb, total, seuil, prestation) =>
   (prestation
     ? `Bonjour, voici la facture de ${e.prenom} — ${prestation} : ${montantTxt(total)}.\n`
     : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n`) +
-  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}).\n` +
+  `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}).\n` +
   `${mentionAutomatique(seuil)}`;
 
 // WhatsApp accepte un balisage léger : *gras* et _italique_. Le PDF part à côté,
@@ -1358,7 +1358,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
                : "")) +
          `• *Total : ${montantTxt(total)}*\n\n` +
          blocLiens(liens) +
-         `${liens && liens.stripeUrl ? "Ou bien : " + MOYENS_PAIEMENT_TEXTE(e, p).replace(/^Règlement au choix : /, "") : MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
          (liens && liens.pdfUrl ? "" : `La facture détaillée est jointe en PDF.\n\n`) +
          `_${mentionAutomatique(seuil)}_\n\n` +
          `${signatureBoost}`;
@@ -1371,7 +1371,7 @@ const makeRappelEmail = (e, mois, total, dates) => ({
 const makeRappelSMS = (e, mois, total) =>
   `Boost'Étude — Rappel ${mois}\n` +
   `Bonjour, le règlement de ${montantTxt(total)} pour ${e.prenom} est en attente.\n` +
-  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}). Merci !`;
+  `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}). Merci !`;
 const makeAbsenceEmail = (e, dateLabel, justifie) => ({
   sujet: `Absence de ${e.prenom} ${e.nom} — ${dateLabel} — Boost'Étude`,
   corps: justifie ? `Bonjour ${e.parent},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude\nboostetude@gmail.com` : `Bonjour ${e.parent},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude\nboostetude@gmail.com`
@@ -1396,7 +1396,7 @@ const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse, liens, p) => 
          ((dejaVerse || 0) > 0 ? `• Déjà versé : ${montantTxt(dejaVerse)}\n` : "") +
          `• *Reste à régler : ${montantTxt(reste)}*\n\n` +
          blocLiens(liens) +
-         `${liens && liens.stripeUrl ? "Ou bien : " + MOYENS_PAIEMENT_TEXTE(e, p).replace(/^Règlement au choix : /, "") : MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
          `Merci d'avance,\n${signatureBoost}`;
 };
 // ─── ATOMES ──────────────────────────────────────────────────
@@ -2081,7 +2081,7 @@ function PanneauEnvoi({
         padding: "13px 10px", color: "#fff", fontSize: 14.5, fontWeight: 700, marginBottom: 6,
         cursor: envoiUnique ? "wait" : "pointer", fontFamily: "inherit", opacity: envoiUnique ? 0.6 : 1
       }
-    }, envoiUnique ? "Préparation…" : (type === "rappel" ? "📤 Relancer sur WhatsApp — PDF + paiement en ligne" : "📤 Envoyer sur WhatsApp — PDF + paiement en ligne")),
+    }, envoiUnique ? "Préparation…" : (type === "rappel" ? "📤 Relancer sur WhatsApp — avec la facture PDF" : "📤 Envoyer sur WhatsApp — avec la facture PDF")),
     unGeste && h("div", { style: { fontSize: 11, color: C.gray, textAlign: "center", marginBottom: 10 } },
       "Autres moyens ci-dessous (texte seul, sans liens)"),
 
@@ -2630,7 +2630,7 @@ function FormulaireEleve({
     label: "Mode de paiement",
     value: mp,
     onChange: setMp,
-    options: ["Virement", "Espèces", "Chèque"]
+    options: ["Espèces", "Virement", "Wero"]
   })), /*#__PURE__*/React.createElement(InputArea, {
     label: "Notes",
     value: notes,
@@ -3996,7 +3996,7 @@ function ModuleAppel({
 // soldée. C'est la base qui fait ce calcul, pour qu'il soit le même partout.
 // La carte passe par Stripe et s'enregistre d'elle-même ; elle reste saisissable
 // à la main pour un paiement reçu autrement (terminal, lien ancien).
-const MODES_REGLEMENT = ["Espèces", "Virement", "Wero", "Carte bancaire"];
+const MODES_REGLEMENT = ["Espèces", "Virement", "Wero"];
 
 function ModaleFacture({
   eleve,
@@ -4178,7 +4178,7 @@ function ModaleFacture({
         h(InputText, {
           label: "Note (visible sur la facture)",
           value: notes, onChange: setNotes,
-          placeholder: "Chèque remis le 3, encaissé le 10…"
+          placeholder: "Espèces remises au cours du 3…"
         }),
         notes !== (existante?.notes ?? "") && h(BtnSecondary, { label: "Enregistrer la note", onClick: enregistrerNotes, full: true }))
     ));
@@ -4504,11 +4504,6 @@ function construireFacturePDF(facture, eleve, parametres) {
       { taille: 9, couleur: [0.18, 0.49, 0.31] });
     y += 13;
   } else {
-    if (facture.stripeUrl) {
-      page.texte(M, y + 2, "Payer en ligne par carte bancaire :", { taille: 9, gras: true, couleur: NOIR });
-      page.texte(M, y + 14, facture.stripeUrl, { taille: 9, couleur: NAVY_PDF });
-      y += 26;
-    }
     y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve, p), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
     y += 2;
     if (p.iban) {
@@ -4604,13 +4599,11 @@ const lienConversation = (canal, tel, texte) => canal === "sms"
 
 async function preparerLiens(facture, eleve, parametres) {
   const soucis = [];
-  let stripeUrl = null, pdfUrl = null;
-  if (resteDu(facture) > 0) {
-    try { stripeUrl = await api.lienPaiementStripe(facture.id); }
-    catch (e) { soucis.push("lien de paiement par carte (" + (e.message || e) + ")"); }
-  }
+  // Plus de paiement par carte en ligne (21/11/2026) : seul le PDF part en lien.
+  const stripeUrl = null;
+  let pdfUrl = null;
   try {
-    const blob = facturePDFBlob({ ...facture, stripeUrl: stripeUrl || facture.stripeUrl }, eleve, parametres);
+    const blob = facturePDFBlob({ ...facture, stripeUrl: null }, eleve, parametres);
     pdfUrl = await api.deposerFacturePDF(facture, eleve, blob);
   } catch (e) { soucis.push("lien du PDF (" + (e.message || e) + ")"); }
   return { stripeUrl, pdfUrl, soucis };
