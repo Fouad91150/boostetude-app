@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.7.4";
+<script>window.__APP_VERSION = "3.8.0";
 window.__APP_BUILD = "2026-11-21";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
@@ -171,6 +171,18 @@ const lastMonths = n => {
   return r;
 };
 // ─── NORMALISATION DEPUIS SUPABASE ───────────────────────────
+const partPayee = v => {
+  const n = Number(v);
+  return v === null || v === undefined || v === "" || !Number.isFinite(n) ? 1 : Math.min(1, Math.max(0, n));
+};
+const estGratuit = e => !!e && e.part === 0;
+const LIBELLE_PART = p => p === 0 ? "Gratuit" : p === 1 || p == null ? "Tarif normal" : p === 0.5 ? "Moitié prix" : `${Math.round(p * 100)} % du prix`;
+// Applique la part payée au tarif horaire, après les remises : Marwa à moitié
+// prix paie la moitié de son tarif déjà remisé.
+const appliquerPart = eleves => (eleves || []).map(e => {
+  if (e.part == null || e.part === 1) return e;
+  return { ...e, th: Math.round(e.th * e.part * 100) / 100, thAvantPart: e.th };
+});
 const normalizeEleveDB = x => ({
   id: x.id,
   // Espaces parasites retirés à la lecture : « Ilyes  Nassi » s'affichait avec
@@ -187,7 +199,10 @@ const normalizeEleveDB = x => ({
   notes: x.notes ?? "",
   groupe_id: x.groupe_id ?? null,
   // Nouvel élève : sa première séance de chaque matière n'est pas facturée.
-  premierCoursOffert: x.premier_cours_offert === true
+  premierCoursOffert: x.premier_cours_offert === true,
+  // Tarif spécial (21/11/2026) : part du prix payée — 1 normal, 0,5 moitié
+  // prix, 0 gratuit. Colonne eleves.part_payee ; absente = tarif normal.
+  part: partPayee(x.part_payee)
 });
 // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : l'appartenance
 // à un groupe passe par la table de liaison eleves_groupes (many-to-many). La colonne
@@ -240,6 +255,8 @@ const compterEnfants = eleves => {
   const par = {};
   (eleves || []).forEach(e => {
     if (e.actif === false) return;
+    // Un enfant gratuit (offre famille) ne déclenche pas la remise fratrie.
+    if (e.part === 0) return;
     const k = cleFoyer(e);
     if (k) par[k] = (par[k] || 0) + 1;
   });
@@ -303,6 +320,7 @@ const api = {
       const { data: reg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
       elList = appliquerRemiseMulti(elList, grList, reg && reg.remise_multi);
     }
+    elList = appliquerPart(elList);
     const coursMap = {};
     (co.data || []).forEach(c => {
       coursMap[c.id] = c;
@@ -382,11 +400,18 @@ const api = {
       groupe_id: groupeIds[0] || null,
       ...(typeof form.premierCoursOffert === "boolean" ? { premier_cours_offert: form.premierCoursOffert } : {})
     };
+    if (typeof form.part === "number") row.part_payee = form.part;
     let eleveId = form.id;
     if (eleveId) {
-      const {
+      let {
         error
       } = await sb.from("eleves").update(row).eq("id", eleveId);
+      // Colonne part_payee pas encore créée : on enregistre le reste et on le dit.
+      if (error && /part_payee/.test(error.message || "") && "part_payee" in row) {
+        const { part_payee, ...sans } = row;
+        ({ error } = await sb.from("eleves").update(sans).eq("id", eleveId));
+        if (!error) throw new Error("Fiche enregistrée, mais le tarif spécial n'a pas pu l'être : la colonne part_payee manque dans Supabase.");
+      }
       if (error) throw error;
     } else {
       const {
@@ -1264,7 +1289,8 @@ const lignesFacture = (matieres, montant, thSecours) => {
 const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
-    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
+    // Élève gratuit : rien à facturer ; un brouillon resté ouvert sans versement est retiré.
+    const dates = estGratuit(e) ? [] : seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
       .filter(d => !estFuture(d.date));
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
@@ -2454,6 +2480,7 @@ function FormulaireEleve({
   const [notes, setNotes] = useState(def.notes);
   // Nouvel élève : coché d'office (sa 1re séance de chaque matière est offerte).
   const [offert, setOffert] = useState(initial?.id ? initial.premierCoursOffert === true : true);
+  const [part, setPart] = useState(String(initial?.part ?? 1));
   const [saving, setSaving] = useState(false);
   const th = TARIFS_H[niveau] ?? 12.5;
   const toggleGroupe = gid => setGroupeIds(ids => ids.includes(gid) ? ids.filter(x => x !== gid) : [...ids, gid]);
@@ -2471,6 +2498,9 @@ function FormulaireEleve({
         parent,
         notes,
         premierCoursOffert: offert,
+        // Envoyé seulement s'il change : une fiche ordinaire s'enregistre même
+        // si la colonne part_payee n'existe pas encore.
+        ...(Number(part) !== (initial?.part ?? 1) ? { part: Number(part) } : {}),
         groupeIds
       });
     } finally {
@@ -2539,6 +2569,8 @@ function FormulaireEleve({
   }, h("input", { type: "checkbox", checked: offert, onChange: e => setOffert(e.target.checked),
       style: { width: 20, height: 20, accentColor: C.green } }),
     h("span", null, "🎁 ", h("b", null, "Premier cours offert"), " — la 1re séance de chaque matière n'est pas facturée")),
+  h(SelectInput, { label: "Tarif spécial", value: part, onChange: setPart,
+    options: [{ v: "1", l: "Tarif normal" }, { v: "0.5", l: "Moitié prix (paie une séance sur deux)" }, { v: "0", l: "Gratuit (aucune facture)" }] }),
   /*#__PURE__*/React.createElement(Lbl, {
     text: "Groupes suivis (matières)"
   }), /*#__PURE__*/React.createElement("div", {
@@ -2703,7 +2735,9 @@ function FicheEleve({
     rows: [
       ...(eleve.remise > 0 ? [["Tarif normal", euros(eleve.thBase) + "/h"],
         ["Remise", `− ${euros(eleve.remise)}/h (${(eleve.motifsRemise || []).join(" + ")})`]] : []),
-      ["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)], ["Mode de règlement", eleve.mp]]
+      ...(eleve.part != null && eleve.part !== 1 ? [["Tarif spécial", LIBELLE_PART(eleve.part)]] : []),
+      ...(eleve.part === 0 ? [] : [["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)]]),
+      ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
     rows: [["Nom", eleve.parent || "—"], ["Tél", eleve.tel || "—"], ["Email", eleve.email || "—"]]
@@ -5221,7 +5255,7 @@ function ModuleFacturation({
     }
   }, actifs.map(e => {
     const f = ouverteDe(e.id);
-    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures), e.premierCoursOffert);
+    const dates = f ? f.datesSeances || [] : estGratuit(e) ? [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures), e.premierCoursOffert);
     const nb = dates.length;
     const montant = f ? f.montant : montantSeances(dates, e.th);
     return /*#__PURE__*/React.createElement("div", {
@@ -7688,7 +7722,7 @@ function App() {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
-        const dates = seancesOuvertes(eid, ap, gr, depuis, ele.premierCoursOffert);
+        const dates = estGratuit(ele) ? [] : seancesOuvertes(eid, ap, gr, depuis, ele.premierCoursOffert);
         const montant = montantSeances(dates, ele.th);
         await api.syncFacture(eid, dates, montant);
       }
