@@ -30,6 +30,7 @@ function FormulaireEleve({
   const [notes, setNotes] = useState(def.notes);
   // Nouvel élève : coché d'office (sa 1re séance de chaque matière est offerte).
   const [offert, setOffert] = useState(initial?.id ? initial.premierCoursOffert === true : true);
+  const [part, setPart] = useState(String(initial?.part ?? 1));
   const [saving, setSaving] = useState(false);
   const th = TARIFS_H[niveau] ?? 12.5;
   const toggleGroupe = gid => setGroupeIds(ids => ids.includes(gid) ? ids.filter(x => x !== gid) : [...ids, gid]);
@@ -47,6 +48,7 @@ function FormulaireEleve({
         parent,
         notes,
         premierCoursOffert: offert,
+        part: Number(part),
         groupeIds
       });
     } finally {
@@ -115,6 +117,8 @@ function FormulaireEleve({
   }, h("input", { type: "checkbox", checked: offert, onChange: e => setOffert(e.target.checked),
       style: { width: 20, height: 20, accentColor: C.green } }),
     h("span", null, "🎁 ", h("b", null, "Premier cours offert"), " — la 1re séance de chaque matière n'est pas facturée")),
+  h(SelectInput, { label: "Tarif spécial", value: part, onChange: setPart,
+    options: [{ v: "1", l: "Tarif normal" }, { v: "0.5", l: "Moitié prix (paie une séance sur deux)" }, { v: "0", l: "Gratuit (aucune facture)" }] }),
   /*#__PURE__*/React.createElement(Lbl, {
     text: "Groupes suivis (matières)"
   }), /*#__PURE__*/React.createElement("div", {

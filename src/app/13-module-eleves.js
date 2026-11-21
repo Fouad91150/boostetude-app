@@ -4,7 +4,8 @@ function ModuleEleves({
   groupes,
   onCreate,
   onUpdate,
-  onToggle
+  onToggle,
+  onReload
 }) {
   const [vue, setVue] = useState("liste");
   const [sel, setSel] = useState(null);
@@ -68,7 +69,9 @@ function ModuleEleves({
       setVue("liste");
       setSel(null);
     },
-    onToggle: handleToggle
+    onToggle: handleToggle,
+    eleves,
+    onCompteEleve: onReload
   });
   return /*#__PURE__*/React.createElement("div", null, toast && /*#__PURE__*/React.createElement("div", {
     className: "fx-pop-in",

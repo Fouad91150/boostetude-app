@@ -1,4 +1,30 @@
 // ─── NORMALISATION DEPUIS SUPABASE ───────────────────────────
+const partPayee = v => {
+  const n = Number(v);
+  return v === null || v === undefined || v === "" || !Number.isFinite(n) ? 1 : Math.min(1, Math.max(0, n));
+};
+// Le tarif spécial voyage dans les notes de l'élève, sous une étiquette lisible
+// (« [Tarif : moitié prix] », « [Tarif : gratuit] ») : aucune colonne à créer
+// dans Supabase. L'étiquette est retirée des notes affichées.
+const ETIQUETTE_TARIF = /\s*\[Tarif\s*:\s*(gratuit|moitié prix)\]\s*/i;
+const partDepuisNotes = notes => {
+  const m = (notes || "").match(ETIQUETTE_TARIF);
+  return !m ? null : /gratuit/i.test(m[1]) ? 0 : 0.5;
+};
+const notesSansTarif = notes => (notes || "").replace(ETIQUETTE_TARIF, " ").trim();
+const notesAvecTarif = (notes, part) => {
+  const base = notesSansTarif(notes);
+  const tag = part === 0 ? "[Tarif : gratuit]" : part === 0.5 ? "[Tarif : moitié prix]" : "";
+  return [tag, base].filter(Boolean).join(" ");
+};
+const estGratuit = e => !!e && e.part === 0;
+const LIBELLE_PART = p => p === 0 ? "Gratuit" : p === 1 || p == null ? "Tarif normal" : p === 0.5 ? "Moitié prix" : `${Math.round(p * 100)} % du prix`;
+// Applique la part payée au tarif horaire, après les remises : Marwa à moitié
+// prix paie la moitié de son tarif déjà remisé.
+const appliquerPart = eleves => (eleves || []).map(e => {
+  if (e.part == null || e.part === 1) return e;
+  return { ...e, th: Math.round(e.th * e.part * 100) / 100, thAvantPart: e.th };
+});
 const normalizeEleveDB = x => ({
   id: x.id,
   // Espaces parasites retirés à la lecture : « Ilyes  Nassi » s'affichait avec
@@ -12,10 +38,14 @@ const normalizeEleveDB = x => ({
   email: x.parent_email ?? "",
   tel: x.parent_tel ?? "",
   parent: x.parent_nom ?? `Parent de ${x.prenom}`,
-  notes: x.notes ?? "",
+  notes: notesSansTarif(x.notes),
   groupe_id: x.groupe_id ?? null,
   // Nouvel élève : sa première séance de chaque matière n'est pas facturée.
-  premierCoursOffert: x.premier_cours_offert === true
+  premierCoursOffert: x.premier_cours_offert === true,
+  // Tarif spécial (21/11/2026) : part du prix payée — 1 normal, 0,5 moitié
+  // prix, 0 gratuit. Lu dans les notes (voir ETIQUETTE_TARIF).
+  identifiant: x.identifiant ?? null,
+  part: x.part_payee != null ? partPayee(x.part_payee) : (partDepuisNotes(x.notes) ?? 1)
 });
 // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : l'appartenance
 // à un groupe passe par la table de liaison eleves_groupes (many-to-many). La colonne
@@ -68,6 +98,8 @@ const compterEnfants = eleves => {
   const par = {};
   (eleves || []).forEach(e => {
     if (e.actif === false) return;
+    // Un enfant gratuit (offre famille) ne déclenche pas la remise fratrie.
+    if (e.part === 0) return;
     const k = cleFoyer(e);
     if (k) par[k] = (par[k] || 0) + 1;
   });

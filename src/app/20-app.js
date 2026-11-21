@@ -175,7 +175,7 @@ function App() {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
-        const dates = seancesOuvertes(eid, ap, gr, depuis, ele.premierCoursOffert);
+        const dates = estGratuit(ele) ? [] : seancesOuvertes(eid, ap, gr, depuis, ele.premierCoursOffert);
         const montant = montantSeances(dates, ele.th);
         await api.syncFacture(eid, dates, montant);
       }
@@ -506,7 +506,8 @@ function App() {
     groupes: groupes,
     onCreate: handleCreateEleve,
     onUpdate: handleUpdateEleve,
-    onToggle: handleToggleEleve
+    onToggle: handleToggleEleve,
+    onReload: () => reloadAll()
   }), tab === "appel" && /*#__PURE__*/React.createElement(ModuleAppel, {
     eleves: eleves,
     groupes: groupes,

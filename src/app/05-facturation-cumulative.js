@@ -154,7 +154,8 @@ const lignesFacture = (matieres, montant, thSecours) => {
 const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
-    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
+    // Élève gratuit : rien à facturer ; un brouillon resté ouvert sans versement est retiré.
+    const dates = estGratuit(e) ? [] : seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
       .filter(d => !estFuture(d.date));
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;

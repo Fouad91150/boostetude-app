@@ -33,6 +33,7 @@ const api = {
       const { data: reg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
       elList = appliquerRemiseMulti(elList, grList, reg && reg.remise_multi);
     }
+    elList = appliquerPart(elList);
     const coursMap = {};
     (co.data || []).forEach(c => {
       coursMap[c.id] = c;
@@ -98,6 +99,12 @@ const api = {
   // eleves.groupe_id est mise à jour avec le premier groupe pour rester cohérente avec
   // les usages historiques (ex. RLS "eleve lit son groupe"), mais eleves_groupes reste
   // la source de vérité pour l'appel/la facturation multi-matières.
+  // Crée l'accès à l'espace élève, ou lui donne un nouveau mot de passe.
+  async creerCompteEleve(eleveId, identifiant, mdp) {
+    const { data, error } = await sb.rpc("creer_compte_eleve", { p_eleve: eleveId, p_identifiant: identifiant, p_mdp: mdp });
+    if (error) throw new Error(error.message || "Création du compte impossible");
+    return data;
+  },
   async saveEleve(form) {
     const groupeIds = form.groupeIds || [];
     const row = {
@@ -108,7 +115,7 @@ const api = {
       parent_nom: form.parent,
       parent_tel: form.tel,
       parent_email: form.email,
-      notes: form.notes,
+      notes: typeof form.part === "number" ? notesAvecTarif(form.notes, form.part) : form.notes,
       groupe_id: groupeIds[0] || null,
       ...(typeof form.premierCoursOffert === "boolean" ? { premier_cours_offert: form.premierCoursOffert } : {})
     };

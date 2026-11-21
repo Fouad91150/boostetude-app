@@ -4,7 +4,9 @@ function FicheEleve({
   groupeNom,
   onEdit,
   onBack,
-  onToggle
+  onToggle,
+  eleves,
+  onCompteEleve
 }) {
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -50,7 +52,9 @@ function FicheEleve({
     rows: [
       ...(eleve.remise > 0 ? [["Tarif normal", euros(eleve.thBase) + "/h"],
         ["Remise", `− ${euros(eleve.remise)}/h (${(eleve.motifsRemise || []).join(" + ")})`]] : []),
-      ["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)], ["Mode de règlement", eleve.mp]]
+      ...(eleve.part != null && eleve.part !== 1 ? [["Tarif spécial", LIBELLE_PART(eleve.part)]] : []),
+      ...(eleve.part === 0 ? [] : [["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)]]),
+      ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
     rows: [["Nom", eleve.parent || "—"], ["Tél", eleve.tel || "—"], ["Email", eleve.email || "—"]]
@@ -91,7 +95,7 @@ function FicheEleve({
       fontSize: 13,
       fontWeight: k ? 600 : 400
     }
-  }, v))))), /*#__PURE__*/React.createElement("div", {
+  }, v))))), h(CarteEspaceEleve, { eleve, eleves, onChange: onCompteEleve }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
