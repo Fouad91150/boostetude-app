@@ -72,8 +72,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.7.0";
-window.__APP_BUILD = "2026-10-14";
+<script>window.__APP_VERSION = "3.9.0";
+window.__APP_BUILD = "2026-11-21";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -171,6 +171,32 @@ const lastMonths = n => {
   return r;
 };
 // ─── NORMALISATION DEPUIS SUPABASE ───────────────────────────
+const partPayee = v => {
+  const n = Number(v);
+  return v === null || v === undefined || v === "" || !Number.isFinite(n) ? 1 : Math.min(1, Math.max(0, n));
+};
+// Le tarif spécial voyage dans les notes de l'élève, sous une étiquette lisible
+// (« [Tarif : moitié prix] », « [Tarif : gratuit] ») : aucune colonne à créer
+// dans Supabase. L'étiquette est retirée des notes affichées.
+const ETIQUETTE_TARIF = /\s*\[Tarif\s*:\s*(gratuit|moitié prix)\]\s*/i;
+const partDepuisNotes = notes => {
+  const m = (notes || "").match(ETIQUETTE_TARIF);
+  return !m ? null : /gratuit/i.test(m[1]) ? 0 : 0.5;
+};
+const notesSansTarif = notes => (notes || "").replace(ETIQUETTE_TARIF, " ").trim();
+const notesAvecTarif = (notes, part) => {
+  const base = notesSansTarif(notes);
+  const tag = part === 0 ? "[Tarif : gratuit]" : part === 0.5 ? "[Tarif : moitié prix]" : "";
+  return [tag, base].filter(Boolean).join(" ");
+};
+const estGratuit = e => !!e && e.part === 0;
+const LIBELLE_PART = p => p === 0 ? "Gratuit" : p === 1 || p == null ? "Tarif normal" : p === 0.5 ? "Moitié prix" : `${Math.round(p * 100)} % du prix`;
+// Applique la part payée au tarif horaire, après les remises : Marwa à moitié
+// prix paie la moitié de son tarif déjà remisé.
+const appliquerPart = eleves => (eleves || []).map(e => {
+  if (e.part == null || e.part === 1) return e;
+  return { ...e, th: Math.round(e.th * e.part * 100) / 100, thAvantPart: e.th };
+});
 const normalizeEleveDB = x => ({
   id: x.id,
   // Espaces parasites retirés à la lecture : « Ilyes  Nassi » s'affichait avec
@@ -184,10 +210,14 @@ const normalizeEleveDB = x => ({
   email: x.parent_email ?? "",
   tel: x.parent_tel ?? "",
   parent: x.parent_nom ?? `Parent de ${x.prenom}`,
-  notes: x.notes ?? "",
+  notes: notesSansTarif(x.notes),
   groupe_id: x.groupe_id ?? null,
   // Nouvel élève : sa première séance de chaque matière n'est pas facturée.
-  premierCoursOffert: x.premier_cours_offert === true
+  premierCoursOffert: x.premier_cours_offert === true,
+  // Tarif spécial (21/11/2026) : part du prix payée — 1 normal, 0,5 moitié
+  // prix, 0 gratuit. Lu dans les notes (voir ETIQUETTE_TARIF).
+  identifiant: x.identifiant ?? null,
+  part: x.part_payee != null ? partPayee(x.part_payee) : (partDepuisNotes(x.notes) ?? 1)
 });
 // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : l'appartenance
 // à un groupe passe par la table de liaison eleves_groupes (many-to-many). La colonne
@@ -240,6 +270,8 @@ const compterEnfants = eleves => {
   const par = {};
   (eleves || []).forEach(e => {
     if (e.actif === false) return;
+    // Un enfant gratuit (offre famille) ne déclenche pas la remise fratrie.
+    if (e.part === 0) return;
     const k = cleFoyer(e);
     if (k) par[k] = (par[k] || 0) + 1;
   });
@@ -303,6 +335,7 @@ const api = {
       const { data: reg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
       elList = appliquerRemiseMulti(elList, grList, reg && reg.remise_multi);
     }
+    elList = appliquerPart(elList);
     const coursMap = {};
     (co.data || []).forEach(c => {
       coursMap[c.id] = c;
@@ -368,6 +401,12 @@ const api = {
   // eleves.groupe_id est mise à jour avec le premier groupe pour rester cohérente avec
   // les usages historiques (ex. RLS "eleve lit son groupe"), mais eleves_groupes reste
   // la source de vérité pour l'appel/la facturation multi-matières.
+  // Crée l'accès à l'espace élève, ou lui donne un nouveau mot de passe.
+  async creerCompteEleve(eleveId, identifiant, mdp) {
+    const { data, error } = await sb.rpc("creer_compte_eleve", { p_eleve: eleveId, p_identifiant: identifiant, p_mdp: mdp });
+    if (error) throw new Error(error.message || "Création du compte impossible");
+    return data;
+  },
   async saveEleve(form) {
     const groupeIds = form.groupeIds || [];
     const row = {
@@ -378,7 +417,7 @@ const api = {
       parent_nom: form.parent,
       parent_tel: form.tel,
       parent_email: form.email,
-      notes: form.notes,
+      notes: typeof form.part === "number" ? notesAvecTarif(form.notes, form.part) : form.notes,
       groupe_id: groupeIds[0] || null,
       ...(typeof form.premierCoursOffert === "boolean" ? { premier_cours_offert: form.premierCoursOffert } : {})
     };
@@ -1264,16 +1303,23 @@ const lignesFacture = (matieres, montant, thSecours) => {
 const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
-    const dates = seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
+    // Élève gratuit : rien à facturer ; un brouillon resté ouvert sans versement est retiré.
+    const dates = estGratuit(e) ? [] : seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
       .filter(d => !estFuture(d.date));
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     const montant = montantSeances(dates, e.th);
-    // Ajout de séances, ou même nombre de séances mais montant à corriger
-    // (cours offert pas encore déduit). Jamais de séance retirée.
-    const aCorriger = brouillon && dates.length === actuel && Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004
-      && !(Number(brouillon.encaisse) > 0);
-    return dates.length > actuel || aCorriger ? { eid: e.id, dates, montant } : null;
+    // Le brouillon est réaligné sur l'appel dès qu'il en diffère : séance ajoutée,
+    // séance retirée de l'appel (élève inscrit par erreur dans un groupe), cours
+    // offert pas encore déduit. Un brouillon qui a déjà reçu de l'argent n'est
+    // pas touché : il se corrige à la main.
+    const cle = d => `${d.date}|${d.matiere || ""}|${d.offert ? 1 : 0}`;
+    const differe = brouillon && (
+      [...(brouillon.datesSeances || [])].map(cle).sort().join() !== dates.map(cle).sort().join()
+      || Math.abs((Number(brouillon.montant) || 0) - montant) > 0.004);
+    if (brouillon && Number(brouillon.encaisse) > 0) return dates.length > actuel ? { eid: e.id, dates, montant } : null;
+    if (!brouillon) return dates.length ? { eid: e.id, dates, montant } : null;
+    return differe ? { eid: e.id, dates, montant } : null;
   })
   .filter(Boolean);
 
@@ -1290,10 +1336,10 @@ const SEUIL_FACTURATION_DEFAUT = 3;
 
 // Trois moyens acceptés. Pour un virement, le nom de l'enfant est indispensable :
 // sans lui, un virement arrive sans qu'on sache à qui le rattacher.
-// Moyens de règlement 2026-2027 : carte en ligne (Stripe), Wero, virement,
-// espèces — plus de chèque. Wero toujours cité ; son numéro s'ajoute s'il est renseigné dans Réglages.
+// Moyens de règlement (21/11/2026) : espèces, virement, Wero — ni carte en
+// ligne (Stripe) ni chèque. Wero toujours cité ; son numéro s'ajoute s'il est renseigné dans Réglages.
 const MOYENS_PAIEMENT_TEXTE = (e, p) =>
-  `Règlement au choix : Wero${p && p.wero ? ` (${p.wero})` : ""}, virement bancaire ou espèces au cours. ` +
+  `Règlement au choix : espèces au cours, virement bancaire ou Wero${p && p.wero ? ` (${p.wero})` : ""}. ` +
   `Pour un virement, merci d'indiquer « ${e.prenom} ${e.nom} » en référence.`;
 
 // Les deux liens qui font de l'envoi un seul geste : la facture PDF (un lien,
@@ -1302,13 +1348,13 @@ const MOYENS_PAIEMENT_TEXTE = (e, p) =>
 const blocLiens = liens => {
   const l = liens || {};
   return (l.pdfUrl ? `📄 *Votre facture (PDF)* :\n${l.pdfUrl}\n\n` : "") +
-         (l.stripeUrl ? `💳 *Payer en ligne par carte* :\n${l.stripeUrl}\n\n` : "");
+         "";
 };
 
 const mentionAutomatique = seuil =>
   `Message automatique envoyé toutes les ${seuil || SEUIL_FACTURATION_DEFAUT} séances.`;
 
-const signatureBoost = "Fouad Elmkhanter — Boost'Étude";
+const signatureBoost = "Boost'Étude";
 
 // Un stage se vend au forfait : il n'y a pas de séances à compter, seulement un
 // libellé et un prix. `prestation`, quand elle est là, remplace le décompte.
@@ -1328,7 +1374,7 @@ const makeFactureSMS = (e, mois, nb, total, seuil, prestation) =>
   (prestation
     ? `Bonjour, voici la facture de ${e.prenom} — ${prestation} : ${montantTxt(total)}.\n`
     : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n`) +
-  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}).\n` +
+  `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}).\n` +
   `${mentionAutomatique(seuil)}`;
 
 // WhatsApp accepte un balisage léger : *gras* et _italique_. Le PDF part à côté,
@@ -1352,7 +1398,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
                : "")) +
          `• *Total : ${montantTxt(total)}*\n\n` +
          blocLiens(liens) +
-         `${liens && liens.stripeUrl ? "Ou bien : " + MOYENS_PAIEMENT_TEXTE(e, p).replace(/^Règlement au choix : /, "") : MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
          (liens && liens.pdfUrl ? "" : `La facture détaillée est jointe en PDF.\n\n`) +
          `_${mentionAutomatique(seuil)}_\n\n` +
          `${signatureBoost}`;
@@ -1365,10 +1411,10 @@ const makeRappelEmail = (e, mois, total, dates) => ({
 const makeRappelSMS = (e, mois, total) =>
   `Boost'Étude — Rappel ${mois}\n` +
   `Bonjour, le règlement de ${montantTxt(total)} pour ${e.prenom} est en attente.\n` +
-  `Espèces, chèque ou virement (référence : ${e.prenom} ${e.nom}). Merci !`;
+  `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}). Merci !`;
 const makeAbsenceEmail = (e, dateLabel, justifie) => ({
   sujet: `Absence de ${e.prenom} ${e.nom} — ${dateLabel} — Boost'Étude`,
-  corps: justifie ? `Bonjour ${e.parent},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude — M. El Mkhanter\nboostetude@gmail.com` : `Bonjour ${e.parent},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude — M. El Mkhanter\nboostetude@gmail.com`
+  corps: justifie ? `Bonjour ${e.parent},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude\nboostetude@gmail.com` : `Bonjour ${e.parent},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude\nboostetude@gmail.com`
 });
 const makeAbsenceSMS = (e, dateLabel, justifie) => justifie ? `Boost'Étude : bonjour ${e.parent}, nous confirmons l'absence justifiée de ${e.prenom} le ${dateLabel}. Merci !` : `Boost'Étude : bonjour ${e.parent}, ${e.prenom} était absent(e) le ${dateLabel}. Merci de nous contacter si besoin.`;
 const {
@@ -1390,7 +1436,7 @@ const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse, liens, p) => 
          ((dejaVerse || 0) > 0 ? `• Déjà versé : ${montantTxt(dejaVerse)}\n` : "") +
          `• *Reste à régler : ${montantTxt(reste)}*\n\n` +
          blocLiens(liens) +
-         `${liens && liens.stripeUrl ? "Ou bien : " + MOYENS_PAIEMENT_TEXTE(e, p).replace(/^Règlement au choix : /, "") : MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
+         `${MOYENS_PAIEMENT_TEXTE(e, p)}\n\n` +
          `Merci d'avance,\n${signatureBoost}`;
 };
 // ─── ATOMES ──────────────────────────────────────────────────
@@ -2075,7 +2121,7 @@ function PanneauEnvoi({
         padding: "13px 10px", color: "#fff", fontSize: 14.5, fontWeight: 700, marginBottom: 6,
         cursor: envoiUnique ? "wait" : "pointer", fontFamily: "inherit", opacity: envoiUnique ? 0.6 : 1
       }
-    }, envoiUnique ? "Préparation…" : (type === "rappel" ? "📤 Relancer sur WhatsApp — PDF + paiement en ligne" : "📤 Envoyer sur WhatsApp — PDF + paiement en ligne")),
+    }, envoiUnique ? "Préparation…" : (type === "rappel" ? "📤 Relancer sur WhatsApp — avec la facture PDF" : "📤 Envoyer sur WhatsApp — avec la facture PDF")),
     unGeste && h("div", { style: { fontSize: 11, color: C.gray, textAlign: "center", marginBottom: 10 } },
       "Autres moyens ci-dessous (texte seul, sans liens)"),
 
@@ -2448,6 +2494,7 @@ function FormulaireEleve({
   const [notes, setNotes] = useState(def.notes);
   // Nouvel élève : coché d'office (sa 1re séance de chaque matière est offerte).
   const [offert, setOffert] = useState(initial?.id ? initial.premierCoursOffert === true : true);
+  const [part, setPart] = useState(String(initial?.part ?? 1));
   const [saving, setSaving] = useState(false);
   const th = TARIFS_H[niveau] ?? 12.5;
   const toggleGroupe = gid => setGroupeIds(ids => ids.includes(gid) ? ids.filter(x => x !== gid) : [...ids, gid]);
@@ -2465,6 +2512,7 @@ function FormulaireEleve({
         parent,
         notes,
         premierCoursOffert: offert,
+        part: Number(part),
         groupeIds
       });
     } finally {
@@ -2533,6 +2581,8 @@ function FormulaireEleve({
   }, h("input", { type: "checkbox", checked: offert, onChange: e => setOffert(e.target.checked),
       style: { width: 20, height: 20, accentColor: C.green } }),
     h("span", null, "🎁 ", h("b", null, "Premier cours offert"), " — la 1re séance de chaque matière n'est pas facturée")),
+  h(SelectInput, { label: "Tarif spécial", value: part, onChange: setPart,
+    options: [{ v: "1", l: "Tarif normal" }, { v: "0.5", l: "Moitié prix (paie une séance sur deux)" }, { v: "0", l: "Gratuit (aucune facture)" }] }),
   /*#__PURE__*/React.createElement(Lbl, {
     text: "Groupes suivis (matières)"
   }), /*#__PURE__*/React.createElement("div", {
@@ -2624,7 +2674,7 @@ function FormulaireEleve({
     label: "Mode de paiement",
     value: mp,
     onChange: setMp,
-    options: ["Virement", "Espèces", "Chèque"]
+    options: ["Espèces", "Virement", "Wero"]
   })), /*#__PURE__*/React.createElement(InputArea, {
     label: "Notes",
     value: notes,
@@ -2645,13 +2695,97 @@ function FormulaireEleve({
     onClick: onCancel
   })));
 }
+// ─── ESPACE ÉLÈVE (accès aux cours en ligne) ─────────────────
+// Chaque collégien ou lycéen peut recevoir un identifiant (« f.elmkhanter ») et
+// un mot de passe pour ouvrir ses cours de maths sur l'espace élève. Le compte
+// est créé côté base par la fonction creer_compte_eleve (réservée à l'admin) ;
+// les règles de la base ne lui laissent voir que les cours de son niveau.
+const URL_ESPACE_ELEVE = "https://fouad91150.github.io/boostetude-app/eleve.html";
+const NIVEAUX_ESPACE_ELEVE = ["6ème", "5ème", "4ème", "3ème", "2nde", "1ère", "Terminale"];
+const aEspaceEleve = e => !!e && NIVEAUX_ESPACE_ELEVE.includes(e.niveau);
+
+const sansAccents = s => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "");
+// Première lettre du prénom, un point, le nom de famille : « f.elmkhanter ».
+// Un chiffre s'ajoute si l'identifiant est déjà pris (« f.elmkhanter2 »).
+const identifiantPropose = (eleve, eleves) => {
+  const p = sansAccents(eleve.prenom).toLowerCase().replace(/[^a-z]/g, "").slice(0, 1) || "e";
+  const n = sansAccents(eleve.nom).toLowerCase().replace(/[^a-z0-9]/g, "") || "eleve";
+  const base = `${p}.${n}`.slice(0, 38);
+  const pris = new Set((eleves || []).filter(x => x.id !== eleve.id && x.identifiant).map(x => x.identifiant));
+  if (!pris.has(base)) return base;
+  for (let i = 2; ; i++) if (!pris.has(base + i)) return base + i;
+};
+// Simple à taper sur un téléphone, assez long pour ne pas se deviner.
+const motDePasseEleve = (alea = Math.random) => {
+  const mots = ["maths", "boost", "etude", "reussir", "calcul", "pi", "angle", "vecteur"];
+  const m = mots[Math.floor(alea() * mots.length)];
+  return `${m}-${String(Math.floor(alea() * 9000) + 1000)}`;
+};
+const messageAccesEleve = (e, identifiant, mdp) =>
+  `Bonjour ${e.parent},\n\n` +
+  `Voici l'accès de ${e.prenom} à son *espace élève Boost'Étude*, pour revoir ses cours de mathématiques quand il le souhaite :\n\n` +
+  `🔗 ${URL_ESPACE_ELEVE}\n` +
+  `👤 Identifiant : *${identifiant}*\n` +
+  `🔑 Mot de passe : *${mdp}*\n\n` +
+  `${e.prenom} pourra changer son mot de passe une fois connecté(e).\n\n` +
+  `Boost'Étude`;
+
+function CarteEspaceEleve({ eleve, eleves, onChange }) {
+  const [etat, setEtat] = useState({ identifiant: eleve.identifiant || null, mdp: null });
+  const [occupe, setOccupe] = useState(false);
+  const [erreur, setErreur] = useState("");
+  if (!aEspaceEleve(eleve)) return null;
+  const creer = async () => {
+    setOccupe(true); setErreur("");
+    // Fenêtre réservée tout de suite : après l'attente, le téléphone bloquerait WhatsApp.
+    const fenetre = eleve.tel ? window.open("", "_blank") : null;
+    try {
+      const identifiant = etat.identifiant || identifiantPropose(eleve, eleves);
+      const mdp = motDePasseEleve();
+      const r = await api.creerCompteEleve(eleve.id, identifiant, mdp);
+      setEtat({ identifiant: r || identifiant, mdp });
+      const lien = `https://wa.me/${telWhatsApp(eleve.tel)}?text=${encodeURIComponent(messageAccesEleve(eleve, r || identifiant, mdp))}`;
+      if (fenetre) fenetre.location = lien;
+      onChange && onChange();
+    } catch (e) {
+      if (fenetre) fenetre.close();
+      setErreur(e.message || String(e));
+    } finally { setOccupe(false); }
+  };
+  const renvoyer = () => {
+    window.open(`https://wa.me/${telWhatsApp(eleve.tel)}?text=${encodeURIComponent(messageAccesEleve(eleve, etat.identifiant, etat.mdp))}`, "_blank");
+  };
+  const bouton = (label, onClick, principal) => h("button", {
+    onClick, disabled: occupe,
+    style: { flex: 1, background: principal ? C.green : C.surface, color: principal ? "#fff" : C.texte,
+      border: `1px solid ${principal ? C.green : C.bord}`, borderRadius: 10, padding: "11px 12px",
+      fontSize: 14, fontWeight: 700, cursor: occupe ? "wait" : "pointer", fontFamily: "inherit" }
+  }, label);
+  return h("div", { style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: 16, marginBottom: 10 } },
+    h("div", { style: { fontSize: 12, fontWeight: 700, color: C.gold, marginBottom: 10 } }, "🎓 Espace élève (cours en ligne)"),
+    etat.identifiant
+      ? h("div", { style: { fontSize: 13, color: C.texte, marginBottom: 10 } },
+          "Identifiant : ", h("b", null, etat.identifiant),
+          etat.mdp ? h("span", null, " · Mot de passe : ", h("b", null, etat.mdp)) : null)
+      : h("div", { style: { fontSize: 13, color: C.gray, marginBottom: 10 } },
+          `Pas encore d'accès. Identifiant prévu : ${identifiantPropose(eleve, eleves)}`),
+    h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+      etat.identifiant
+        ? [etat.mdp && eleve.tel ? h(React.Fragment, { key: "r" }, bouton("📤 Renvoyer sur WhatsApp", renvoyer, true)) : null,
+           h(React.Fragment, { key: "n" }, bouton(occupe ? "…" : "🔑 Nouveau mot de passe" + (eleve.tel ? " + WhatsApp" : ""), creer, !etat.mdp))]
+        : bouton(occupe ? "Création…" : "🎓 Créer l'accès" + (eleve.tel ? " et l'envoyer sur WhatsApp" : ""), creer, true)),
+    !eleve.tel && h("div", { style: { fontSize: 12, color: C.gray, marginTop: 8 } }, "Pas de téléphone parent : note le mot de passe affiché et transmets-le."),
+    erreur && h("div", { style: { fontSize: 13, color: C.red, marginTop: 8 } }, erreur));
+}
 // ─── FICHE ÉLÈVE ─────────────────────────────────────────────
 function FicheEleve({
   eleve,
   groupeNom,
   onEdit,
   onBack,
-  onToggle
+  onToggle,
+  eleves,
+  onCompteEleve
 }) {
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2697,7 +2831,9 @@ function FicheEleve({
     rows: [
       ...(eleve.remise > 0 ? [["Tarif normal", euros(eleve.thBase) + "/h"],
         ["Remise", `− ${euros(eleve.remise)}/h (${(eleve.motifsRemise || []).join(" + ")})`]] : []),
-      ["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)], ["Mode de règlement", eleve.mp]]
+      ...(eleve.part != null && eleve.part !== 1 ? [["Tarif spécial", LIBELLE_PART(eleve.part)]] : []),
+      ...(eleve.part === 0 ? [] : [["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)]]),
+      ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
     rows: [["Nom", eleve.parent || "—"], ["Tél", eleve.tel || "—"], ["Email", eleve.email || "—"]]
@@ -2738,7 +2874,7 @@ function FicheEleve({
       fontSize: 13,
       fontWeight: k ? 600 : 400
     }
-  }, v))))), /*#__PURE__*/React.createElement("div", {
+  }, v))))), h(CarteEspaceEleve, { eleve, eleves, onChange: onCompteEleve }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
@@ -2768,7 +2904,8 @@ function ModuleEleves({
   groupes,
   onCreate,
   onUpdate,
-  onToggle
+  onToggle,
+  onReload
 }) {
   const [vue, setVue] = useState("liste");
   const [sel, setSel] = useState(null);
@@ -2832,7 +2969,9 @@ function ModuleEleves({
       setVue("liste");
       setSel(null);
     },
-    onToggle: handleToggle
+    onToggle: handleToggle,
+    eleves,
+    onCompteEleve: onReload
   });
   return /*#__PURE__*/React.createElement("div", null, toast && /*#__PURE__*/React.createElement("div", {
     className: "fx-pop-in",
@@ -3990,7 +4129,7 @@ function ModuleAppel({
 // soldée. C'est la base qui fait ce calcul, pour qu'il soit le même partout.
 // La carte passe par Stripe et s'enregistre d'elle-même ; elle reste saisissable
 // à la main pour un paiement reçu autrement (terminal, lien ancien).
-const MODES_REGLEMENT = ["Espèces", "Virement", "Wero", "Carte bancaire"];
+const MODES_REGLEMENT = ["Espèces", "Virement", "Wero"];
 
 function ModaleFacture({
   eleve,
@@ -4172,7 +4311,7 @@ function ModaleFacture({
         h(InputText, {
           label: "Note (visible sur la facture)",
           value: notes, onChange: setNotes,
-          placeholder: "Chèque remis le 3, encaissé le 10…"
+          placeholder: "Espèces remises au cours du 3…"
         }),
         notes !== (existante?.notes ?? "") && h(BtnSecondary, { label: "Enregistrer la note", onClick: enregistrerNotes, full: true }))
     ));
@@ -4498,11 +4637,6 @@ function construireFacturePDF(facture, eleve, parametres) {
       { taille: 9, couleur: [0.18, 0.49, 0.31] });
     y += 13;
   } else {
-    if (facture.stripeUrl) {
-      page.texte(M, y + 2, "Payer en ligne par carte bancaire :", { taille: 9, gras: true, couleur: NOIR });
-      page.texte(M, y + 14, facture.stripeUrl, { taille: 9, couleur: NAVY_PDF });
-      y += 26;
-    }
     y = page.paragraphe(M, y, MOYENS_PAIEMENT_TEXTE(eleve, p), DROITE - M, { taille: 9, couleur: GRIS, interligne: 1.45 });
     y += 2;
     if (p.iban) {
@@ -4598,13 +4732,11 @@ const lienConversation = (canal, tel, texte) => canal === "sms"
 
 async function preparerLiens(facture, eleve, parametres) {
   const soucis = [];
-  let stripeUrl = null, pdfUrl = null;
-  if (resteDu(facture) > 0) {
-    try { stripeUrl = await api.lienPaiementStripe(facture.id); }
-    catch (e) { soucis.push("lien de paiement par carte (" + (e.message || e) + ")"); }
-  }
+  // Plus de paiement par carte en ligne (21/11/2026) : seul le PDF part en lien.
+  const stripeUrl = null;
+  let pdfUrl = null;
   try {
-    const blob = facturePDFBlob({ ...facture, stripeUrl: stripeUrl || facture.stripeUrl }, eleve, parametres);
+    const blob = facturePDFBlob({ ...facture, stripeUrl: null }, eleve, parametres);
     pdfUrl = await api.deposerFacturePDF(facture, eleve, blob);
   } catch (e) { soucis.push("lien du PDF (" + (e.message || e) + ")"); }
   return { stripeUrl, pdfUrl, soucis };
@@ -5033,6 +5165,12 @@ function ModuleFacturation({
   // Onglet "Gérer" : toutes les factures (en cours + payées) au même endroit, pour un
   // nettoyage rapide (ex. des tests) sans avoir à jongler entre les deux autres onglets.
   const toutes = [...factures].sort((a, b) => (b.periodeFin || b.datePaiement || b.periodeDebut || "").localeCompare(a.periodeFin || a.datePaiement || a.periodeDebut || ""));
+  // « Gérer » ne garde que ce qui demande encore un geste ; les factures soldées
+  // ont leur propre onglet « Payées » (demande de Fouad, 12/11/2026).
+  const aGerer = toutes.filter(f => f.statut !== "paye");
+  const soldees = toutes.filter(f => f.statut === "paye")
+    .sort((a, b) => (b.datePaiement || "").localeCompare(a.datePaiement || ""));
+  const listeGestion = onglet === "payees" ? soldees : aGerer;
   const handleDeleteToutes = f => f.statut === "paye" ? handleDelete(f.id) : handleDeleteEnCours(f.id, f.eleveId, f.datesSeances || []);
   return /*#__PURE__*/React.createElement("div", null, toast && /*#__PURE__*/React.createElement("div", {
     className: "fx-pop-in",
@@ -5088,7 +5226,10 @@ function ModuleFacturation({
     l: "📋 Historique"
   }, {
     k: "gerer",
-    l: `🗑 Gérer${toutes.length > 0 ? ` (${toutes.length})` : ""}`
+    l: `🗑 Gérer${aGerer.length > 0 ? ` (${aGerer.length})` : ""}`
+  }, {
+    k: "payees",
+    l: `✅ Payées${soldees.length > 0 ? ` (${soldees.length})` : ""}`
   }].map(({
     k,
     l
@@ -5213,7 +5354,7 @@ function ModuleFacturation({
     }
   }, actifs.map(e => {
     const f = ouverteDe(e.id);
-    const dates = f ? f.datesSeances || [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures), e.premierCoursOffert);
+    const dates = f ? f.datesSeances || [] : estGratuit(e) ? [] : seancesOuvertes(e.id, appels, groupes, dejaFacturees(e.id, factures), e.premierCoursOffert);
     const nb = dates.length;
     const montant = f ? f.montant : montantSeances(dates, e.th);
     return /*#__PURE__*/React.createElement("div", {
@@ -5596,27 +5737,35 @@ function ModuleFacturation({
         fontFamily: "inherit"
       }
     }, "🗑"));
-  }))), onglet === "gerer" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }))), (onglet === "gerer" || onglet === "payees") && /*#__PURE__*/React.createElement("div", null, onglet === "payees" ? h("div", {
+    style: { background: C.greenPale, border: `1px solid ${C.greenBord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14,
+      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
+  }, h("div", { style: { fontSize: 12.5, color: C.texte, lineHeight: 1.5 } },
+      "Factures entièrement réglées, les plus récentes d'abord. Un versement mal saisi se retire depuis « 💰 Encaisser »."),
+    h("div", { style: { textAlign: "right", flexShrink: 0 } },
+      h("div", { style: { fontSize: 17, fontWeight: 800, color: C.green, fontFamily: FD } },
+        euros(soldees.reduce((t, f) => t + (Number(f.montant) || 0), 0))),
+      h("div", { style: { fontSize: 11, color: C.gray } }, `${soldees.length} facture${soldees.length > 1 ? "s" : ""}`))) : /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: C.gray,
       marginBottom: 14,
       lineHeight: 1.5
     }
-  }, "Toutes vos factures, et de quoi corriger une erreur : enregistrer un règlement, retirer un versement mal saisi, annuler une facture émise par erreur ou la rétablir. Supprimer un brouillon retire aussi les séances « présent » correspondantes de l'appel."), toutes.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Les factures pas encore réglées (brouillons, émises, acomptes, annulées), et de quoi corriger une erreur : enregistrer un règlement, retirer un versement mal saisi, annuler une facture émise par erreur ou la rétablir. Supprimer un brouillon retire aussi les séances « présent » correspondantes de l'appel."), listeGestion.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       padding: "40px 0",
       color: C.gray,
       fontSize: 13
     }
-  }, "Aucune facture pour l'instant."), /*#__PURE__*/React.createElement("div", {
+  }, onglet === "payees" ? "Aucune facture payée pour l'instant." : "Rien à gérer : toutes les factures sont réglées. 🎉"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
       gap: 8
     }
-  }, toutes.map(f => {
+  }, listeGestion.map(f => {
     const e = eleveDe(f.eleveId);
     const periode = f.numero || (f.periodeDebut ? `depuis ${fmtDateCourt(f.periodeDebut)}` : "");
     const emise = !!f.numero;
@@ -7029,7 +7178,7 @@ const makeRemunerationWhatsApp = (prof, ym, seances, heures, montant, taux) =>
   `• ${montantTxt(taux)}/h\n` +
   `• *Total : ${montantTxt(montant)}*\n\n` +
   `Merci pour ton travail de ce mois-ci.\n` +
-  `Fouad Elmkhanter — Boost'Étude`;
+  `Boost'Étude`;
 
 function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial }) {
   const [mois, setMois] = useState(moisInitial || nowYM());
@@ -7665,11 +7814,14 @@ function App() {
     } = await api.fetchAll(role === "admin");
     const grp = gr.find(g => g.id === groupeId);
     if (grp && role === "admin") {
-      for (const eid of grp.eids || []) {
+      // Les élèves du groupe ET ceux qui figuraient sur la feuille : un élève
+      // retiré du groupe garde sinon, sur son brouillon, une séance qu'il n'a
+      // pas suivie (cas de Maroua, 14/10).
+      for (const eid of new Set([...(grp.eids || []), ...Object.keys(presMap || {})])) {
         const ele = el.find(x => x.id === eid);
         if (!ele) continue;
         const depuis = dejaFacturees(eid, fa);
-        const dates = seancesOuvertes(eid, ap, gr, depuis, ele.premierCoursOffert);
+        const dates = estGratuit(ele) ? [] : seancesOuvertes(eid, ap, gr, depuis, ele.premierCoursOffert);
         const montant = montantSeances(dates, ele.th);
         await api.syncFacture(eid, dates, montant);
       }
@@ -8000,7 +8152,8 @@ function App() {
     groupes: groupes,
     onCreate: handleCreateEleve,
     onUpdate: handleUpdateEleve,
-    onToggle: handleToggleEleve
+    onToggle: handleToggleEleve,
+    onReload: () => reloadAll()
   }), tab === "appel" && /*#__PURE__*/React.createElement(ModuleAppel, {
     eleves: eleves,
     groupes: groupes,
