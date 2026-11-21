@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Espace élève — Boost'Étude</title>
+<meta name="theme-color" content="#0a1428">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root { --nuit:#0a1428; --or:#d4af37; --creme:#fafaf7; --texte:#1c2333; --gris:#6b7280; --bord:#e7e3d6; --rouge:#b42318; --vert:#1f7a4d; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--creme); color: var(--texte); font-family: Inter, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+button, input { font-family: inherit; font-size: 16px; }
+header { background: var(--nuit); color: #fff; padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 5; }
+header .logo { width: 36px; height: 36px; border-radius: 10px; background: var(--or); color: var(--nuit); display: grid; place-items: center; font-family: "Playfair Display", serif; font-weight: 800; font-size: 20px; }
+header h1 { margin: 0; font-family: "Playfair Display", serif; font-size: 19px; line-height: 1.1; }
+header small { display: block; color: #c9cfdb; font-size: 12px; font-family: Inter, sans-serif; }
+header .droite { margin-left: auto; display: flex; gap: 8px; }
+.btn-clair { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+main { max-width: 760px; margin: 0 auto; padding: 18px 16px 40px; }
+.carte { background: #fff; border: 1px solid var(--bord); border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(10,20,40,.04); }
+.connexion { max-width: 420px; margin: 28px auto; }
+.connexion h2 { font-family: "Playfair Display", serif; font-size: 26px; margin: 0 0 6px; }
+.connexion p { color: var(--gris); margin: 0 0 18px; font-size: 14px; }
+label { display: block; font-size: 13px; font-weight: 700; margin: 12px 0 6px; }
+input[type=text], input[type=password] { width: 100%; padding: 13px 14px; border: 1px solid var(--bord); border-radius: 12px; background: #fff; outline: none; }
+input:focus { border-color: var(--or); box-shadow: 0 0 0 3px rgba(212,175,55,.2); }
+.btn { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 12px; background: var(--nuit); color: #fff; font-weight: 700; cursor: pointer; }
+.btn:disabled { opacity: .6; }
+.btn-or { background: var(--or); color: var(--nuit); }
+.erreur { color: var(--rouge); font-size: 14px; margin-top: 12px; min-height: 1em; }
+.ok { color: var(--vert); font-size: 14px; margin-top: 12px; }
+.bonjour { font-family: "Playfair Display", serif; font-size: 24px; margin: 4px 0 2px; }
+.sous { color: var(--gris); font-size: 14px; margin-bottom: 18px; }
+.matiere { font-size: 12px; font-weight: 700; color: #8a6d12; letter-spacing: .06em; text-transform: uppercase; margin: 18px 0 8px; }
+.liste { display: grid; gap: 10px; }
+.cours { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: #fff; border: 1px solid var(--bord); border-radius: 14px; padding: 14px 16px; cursor: pointer; color: var(--texte); }
+.cours:active { transform: scale(.99); }
+.cours .num { width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--nuit); color: var(--or); display: grid; place-items: center; font-weight: 800; }
+.cours .t { font-weight: 700; font-size: 15.5px; }
+.cours .m { color: var(--gris); font-size: 12.5px; margin-top: 2px; }
+.cours .fl { margin-left: auto; color: var(--or); font-size: 22px; }
+.vide { color: var(--gris); text-align: center; padding: 30px 10px; }
+/* Lecteur */
+#lecteur { position: fixed; inset: 0; background: #11151f; z-index: 20; display: none; flex-direction: column; }
+#lecteur.ouvert { display: flex; }
+.barre { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); color: #fff; background: var(--nuit); }
+.barre .titre { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barre button { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 10px; padding: 7px 11px; font-size: 14px; cursor: pointer; }
+.barre button.actif { background: var(--or); color: var(--nuit); border-color: var(--or); }
+.scene { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; display: flex; align-items: center; justify-content: center; padding: 10px; touch-action: pan-x pan-y pinch-zoom; }
+.scene.defile { display: block; }
+.scene canvas { display: block; max-width: 100%; height: auto; background: #fff; border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.scene.defile canvas { margin: 0 auto 12px; }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--nuit); color: #fff; }
+.nav button { flex: 1; padding: 13px; border-radius: 12px; border: 0; font-weight: 700; background: var(--or); color: var(--nuit); cursor: pointer; }
+.nav button:disabled { opacity: .35; }
+.nav .compteur { min-width: 70px; text-align: center; font-weight: 700; }
+.astuce { color: #c9cfdb; font-size: 12px; text-align: center; padding: 6px 12px 0; }
+.chargement { color: #c9cfdb; text-align: center; padding: 40px; }
+@media (orientation: landscape) and (max-height: 500px) { .astuce { display: none; } .barre, .nav { padding-top: 6px; padding-bottom: 6px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">B</div>
+  <div><h1>Boost'Étude</h1><small>Espace élève</small></div>
+  <div class="droite" id="actionsEntete" hidden>
+    <button class="btn-clair" id="btnMdp">Mot de passe</button>
+    <button class="btn-clair" id="btnSortir">Sortir</button>
+  </div>
+</header>
+<main id="vue"></main>
+
+<div id="lecteur" aria-modal="true" role="dialog">
+  <div class="barre">
+    <button id="lFermer" aria-label="Fermer">✕</button>
+    <div class="titre" id="lTitre"></div>
+    <button id="lMode">Tout dérouler</button>
+  </div>
+  <div class="astuce" id="lAstuce">Tourne ton téléphone pour voir les diapos en grand · glisse vers la gauche ou la droite</div>
+  <div class="scene" id="lScene"></div>
+  <div class="nav" id="lNav">
+    <button id="lPrec">‹ Précédente</button>
+    <div class="compteur" id="lCompteur"></div>
+    <button id="lSuiv">Suivante ›</button>
+  </div>
+</div>
+
+<script>
+// ─── Espace élève Boost'Étude ─────────────────────────────────
+// Un élève se connecte avec son identifiant (ex. « f.elmkhanter ») et le mot
+// de passe reçu par WhatsApp ; il ne voit que les cours de son niveau : la base
+// (règles RLS) refuse tout le reste, quoi que fasse la page.
+const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
+// Clé de session distincte de l'appli de gestion : ouvrir l'espace élève sur le
+// téléphone de Fouad ne le déconnecte pas de son appli.
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { storageKey: "boostetude-espace-eleve" } });
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const DOMAINE = "@eleve.boostetude.fr";
+const $ = s => document.querySelector(s);
+const vue = $("#vue");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const identifiantVersEmail = id => {
+  const v = id.trim().toLowerCase();
+  return v.includes("@") ? v : v + DOMAINE;
+};
+
+function ecranConnexion(message) {
+  $("#actionsEntete").hidden = true;
+  vue.innerHTML = `
+    <div class="carte connexion">
+      <h2>Bienvenue</h2>
+      <p>Connecte-toi pour retrouver tes cours de mathématiques.</p>
+      <form id="fConnexion" autocomplete="on">
+        <label for="ident">Identifiant</label>
+        <input id="ident" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. f.elmkhanter" required>
+        <label for="mdp">Mot de passe</label>
+        <input id="mdp" type="password" autocomplete="current-password" required>
+        <button class="btn" id="bConnexion">Se connecter</button>
+        <div class="erreur" id="eConnexion">${esc(message || "")}</div>
+      </form>
+      <p style="margin-top:16px">Identifiant ou mot de passe perdu ? Demande-le à ton professeur Boost'Étude.</p>
+    </div>`;
+  $("#fConnexion").onsubmit = async ev => {
+    ev.preventDefault();
+    const b = $("#bConnexion"); b.disabled = true; b.textContent = "Connexion…";
+    const { error } = await sb.auth.signInWithPassword({ email: identifiantVersEmail($("#ident").value), password: $("#mdp").value });
+    if (error) {
+      b.disabled = false; b.textContent = "Se connecter";
+      $("#eConnexion").textContent = /invalid/i.test(error.message) ? "Identifiant ou mot de passe incorrect." : "Connexion impossible : " + error.message;
+      return;
+    }
+    accueil();
+  };
+}
+
+async function accueil() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return ecranConnexion();
+  $("#actionsEntete").hidden = false;
+  vue.innerHTML = `<div class="chargement" style="color:var(--gris)">Chargement de tes cours…</div>`;
+  const { data: moi } = await sb.from("eleves").select("prenom,niveau").eq("auth_id", session.user.id).maybeSingle();
+  if (!moi) {
+    await sb.auth.signOut();
+    return ecranConnexion("Ce compte n'est pas un compte élève.");
+  }
+  const { data: docs, error } = await sb.from("documents")
+    .select("id,titre,niveau,matiere,url,ordre,nb_pages").order("matiere").order("ordre").order("titre");
+  if (error) { vue.innerHTML = `<div class="carte erreur">Impossible de charger les cours : ${esc(error.message)}</div>`; return; }
+  const parMatiere = {};
+  (docs || []).forEach(d => { (parMatiere[d.matiere || "Cours"] ||= []).push(d); });
+  const blocs = Object.entries(parMatiere).map(([m, l]) => `
+    <div class="matiere">${esc(m)} · ${esc(moi.niveau)}</div>
+    <div class="liste">${l.map((d, i) => `
+      <button class="cours" data-id="${esc(d.id)}">
+        <span class="num">${i + 1}</span>
+        <span><div class="t">${esc(d.titre)}</div><div class="m">${d.nb_pages ? d.nb_pages + " diapos" : "Cours"}</div></span>
+        <span class="fl">›</span>
+      </button>`).join("")}
+    </div>`).join("");
+  vue.innerHTML = `
+    <div class="bonjour">Bonjour ${esc(moi.prenom)} 👋</div>
+    <div class="sous">Tes cours de ${esc(moi.niveau)}, à revoir quand tu veux.</div>
+    ${blocs || `<div class="carte vide">Pas encore de cours en ligne pour ton niveau.<br>Ils arrivent bientôt !</div>`}`;
+  vue.querySelectorAll(".cours").forEach(b => b.onclick = () => ouvrirCours((docs || []).find(d => d.id === b.dataset.id)));
+}
+
+// ─── Lecteur de diapos ───────────────────────────────────────
+const L = { pdf: null, page: 1, n: 0, defile: false, rendu: 0 };
+async function ouvrirCours(doc) {
+  $("#lecteur").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+  $("#lTitre").textContent = doc.titre;
+  $("#lScene").innerHTML = `<div class="chargement">Ouverture du cours…</div>`;
+  history.pushState({ lecteur: true }, "");
+  const { data, error } = await sb.storage.from("cours").createSignedUrl(doc.url, 3600);
+  if (error) { $("#lScene").innerHTML = `<div class="chargement">Cours indisponible (${esc(error.message)}).</div>`; return; }
+  try {
+    L.pdf = await pdfjsLib.getDocument({ url: data.signedUrl }).promise;
+  } catch (e) { $("#lScene").innerHTML = `<div class="chargement">Impossible d'ouvrir le cours.</div>`; return; }
+  L.n = L.pdf.numPages; L.page = 1;
+  afficher();
+}
+function fermerCours() {
+  $("#lecteur").classList.remove("ouvert");
+  document.body.style.overflow = "";
+  if (L.pdf) { L.pdf.destroy(); L.pdf = null; }
+  $("#lScene").innerHTML = "";
+}
+async function dessiner(num, largeurDispo, hauteurDispo) {
+  const page = await L.pdf.getPage(num);
+  const base = page.getViewport({ scale: 1 });
+  const echelleAff = hauteurDispo ? Math.min(largeurDispo / base.width, hauteurDispo / base.height) : largeurDispo / base.width;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  // Rendu plus fin que l'écran : le texte reste net quand l'élève zoome.
+  const vp = page.getViewport({ scale: echelleAff * dpr * 1.5 });
+  const c = document.createElement("canvas");
+  c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+  c.style.width = Math.floor(base.width * echelleAff) + "px";
+  await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+  return c;
+}
+async function afficher() {
+  if (!L.pdf) return;
+  const jeton = ++L.rendu;
+  const scene = $("#lScene");
+  const largeur = scene.clientWidth - 20, hauteur = scene.clientHeight - 20;
+  $("#lMode").textContent = L.defile ? "Une par une" : "Tout dérouler";
+  $("#lMode").classList.toggle("actif", L.defile);
+  $("#lNav").style.display = L.defile ? "none" : "flex";
+  scene.classList.toggle("defile", L.defile);
+  if (L.defile) {
+    scene.innerHTML = "";
+    for (let i = 1; i <= L.n; i++) {
+      const c = await dessiner(i, Math.min(largeur, 1100));
+      if (jeton !== L.rendu) return;
+      scene.appendChild(c);
+    }
+  } else {
+    const c = await dessiner(L.page, largeur, hauteur);
+    if (jeton !== L.rendu) return;
+    scene.innerHTML = ""; scene.appendChild(c);
+    $("#lCompteur").textContent = `${L.page} / ${L.n}`;
+    $("#lPrec").disabled = L.page <= 1;
+    $("#lSuiv").disabled = L.page >= L.n;
+  }
+}
+const aller = d => { if (!L.pdf || L.defile) return; const p = Math.min(L.n, Math.max(1, L.page + d)); if (p !== L.page) { L.page = p; afficher(); } };
+$("#lPrec").onclick = () => aller(-1);
+$("#lSuiv").onclick = () => aller(1);
+$("#lMode").onclick = () => { L.defile = !L.defile; afficher(); };
+$("#lFermer").onclick = () => history.back();
+window.addEventListener("popstate", () => { if ($("#lecteur").classList.contains("ouvert")) fermerCours(); });
+document.addEventListener("keydown", e => {
+  if (!$("#lecteur").classList.contains("ouvert")) return;
+  if (e.key === "ArrowRight" || e.key === " ") aller(1);
+  if (e.key === "ArrowLeft") aller(-1);
+  if (e.key === "Escape") history.back();
+});
+// Glisser du doigt pour changer de diapo (seulement sans zoom en cours).
+let x0 = null, y0 = null;
+$("#lScene").addEventListener("touchstart", e => { if (e.touches.length === 1) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
+$("#lScene").addEventListener("touchend", e => {
+  if (x0 === null || (window.visualViewport && window.visualViewport.scale > 1.05)) { x0 = null; return; }
+  const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) aller(dx < 0 ? 1 : -1);
+  x0 = null;
+}, { passive: true });
+let tRedim; window.addEventListener("resize", () => { clearTimeout(tRedim); tRedim = setTimeout(afficher, 250); });
+
+// ─── Compte ──────────────────────────────────────────────────
+$("#btnSortir").onclick = async () => { await sb.auth.signOut(); ecranConnexion(); };
+$("#btnMdp").onclick = () => {
+  vue.innerHTML = `
+    <div class="carte connexion">
+      <h2>Nouveau mot de passe</h2>
+      <p>Choisis un mot de passe dont tu te souviendras (6 caractères minimum).</p>
+      <form id="fMdp">
+        <label for="m1">Nouveau mot de passe</label>
+        <input id="m1" type="password" autocomplete="new-password" minlength="6" required>
+        <label for="m2">Encore une fois</label>
+        <input id="m2" type="password" autocomplete="new-password" minlength="6" required>
+        <button class="btn btn-or" id="bMdp">Enregistrer</button>
+        <button type="button" class="btn" id="bRetour" style="background:#fff;color:var(--texte);border:1px solid var(--bord)">Retour à mes cours</button>
+        <div class="erreur" id="eMdp"></div>
+      </form>
+    </div>`;
+  $("#bRetour").onclick = accueil;
+  $("#fMdp").onsubmit = async ev => {
+    ev.preventDefault();
+    if ($("#m1").value !== $("#m2").value) { $("#eMdp").textContent = "Les deux mots de passe ne sont pas identiques."; return; }
+    $("#bMdp").disabled = true;
+    const { error } = await sb.auth.updateUser({ password: $("#m1").value });
+    $("#bMdp").disabled = false;
+    if (error) { $("#eMdp").textContent = "Impossible : " + error.message; return; }
+    $("#eMdp").className = "ok"; $("#eMdp").textContent = "C'est enregistré ✔";
+    setTimeout(accueil, 1200);
+  };
+};
+
+accueil();
+</script>
+</body>
+</html>
