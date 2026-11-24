@@ -284,13 +284,14 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
   );
 }
 
-function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaissements, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel }) {
+function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaissements, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel, onReloadProfs }) {
   const [onglet, setOnglet] = useState("entreprise");
   const onglets = [
     { k: "entreprise", l: "🏛 Entreprise" },
     { k: "profs", l: "👥 Professeurs" },
     { k: "recettes", l: "📒 Recettes" },
-    { k: "donnees", l: "🗄 Données" }
+    { k: "donnees", l: "🗄 Données" },
+    { k: "cours", l: "🎙 Cours en ligne" }
   ];
   return h("div", null,
     h("div", { style: { display: "flex", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 } },
@@ -306,8 +307,9 @@ function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaiss
         }
       }, l))),
     onglet === "entreprise" && h(OngletEntreprise, { parametres, onSave: onSaveParametres }),
-    onglet === "profs" && h(OngletProfesseurs, { profs, groupes, appels, onSaveTaux, onSaveTel }),
+    onglet === "profs" && h(OngletProfesseurs, { profs, groupes, appels, onSaveTaux, onSaveTel, onReloadProfs }),
     onglet === "recettes" && h(OngletLivreRecettes, { factures, eleves, encaissements }),
-    onglet === "donnees" && h(OngletDonnees, { eleves, groupes, appels, factures, onExportComplet })
+    onglet === "donnees" && h(OngletDonnees, { eleves, groupes, appels, factures, onExportComplet }),
+    onglet === "cours" && h(OngletCoursEnLigne, null)
   );
 }

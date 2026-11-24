@@ -271,7 +271,7 @@ function construireFacturePDF(facture, eleve, parametres) {
       const total = g.total;
       page.texte(M + 10, y + 4, `${g.matiere || "Cours"} — ${eleve.niveau}`, { taille: 10, gras: true, couleur: NOIR });
       page.texte(M + 10, y + 16,
-        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
+        `Cours de soutien scolaire en groupe · séances de ${dureeTxt(g.duree || 2)} · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
         ((g.offertes || []).length ? ` · 1re séance offerte (${(g.offertes || []).map(d => fmtDateCourt(d)).join(", ")})` : "") +
         (eleve.remise > 0 && Math.abs(g.th - eleve.th) < 0.005 ? ` · remise de ${euros(eleve.remise)}/h (${(eleve.motifsRemise || ["inscriptions multiples"]).join(" + ")})` : ""),
         { taille: 8, couleur: GRIS });

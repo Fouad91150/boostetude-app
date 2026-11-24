@@ -34,7 +34,7 @@ function LoginScreen({ onLogin, error, loading }) {
       h("form", {
         onSubmit: e => { e.preventDefault(); if (pret) onLogin(email, password); }
       },
-        h(InputText, { label: "Email", value: email, onChange: setEmail, placeholder: "prenom@boostetude.fr", type: "email" }),
+        h(InputText, { label: "Identifiant ou e-mail", value: email, onChange: setEmail, placeholder: "k.nom ou prenom@boostetude.fr", type: "text" }),
         h(InputText, { label: "Mot de passe", value: password, onChange: setPassword, placeholder: "••••••••", type: "password" }),
         error
           ? h("div", {

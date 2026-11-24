@@ -53,7 +53,7 @@ function FicheEleve({
       ...(eleve.remise > 0 ? [["Tarif normal", euros(eleve.thBase) + "/h"],
         ["Remise", `− ${euros(eleve.remise)}/h (${(eleve.motifsRemise || []).join(" + ")})`]] : []),
       ...(eleve.part != null && eleve.part !== 1 ? [["Tarif spécial", LIBELLE_PART(eleve.part)]] : []),
-      ...(eleve.part === 0 ? [] : [["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)]]),
+      ...(eleve.part === 0 ? [] : [["Tarif horaire", euros(eleve.th) + "/h"], estPrimaire(eleve.niveau) ? ["Séance de 1 h 30", euros(eleve.th * 1.5)] : ["Séance de 2 h", euros(eleve.th * 2)]]),
       ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",

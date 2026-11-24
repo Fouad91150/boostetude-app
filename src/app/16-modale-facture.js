@@ -104,7 +104,7 @@ function ModaleFacture({
 
       // ── Où en est cette facture ──────────────────────────────
       h("div", { style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16 } },
-        ligneSolde(`${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(eleve.th)}/h`, euros(total), C.texte),
+        ligneSolde(`${nb} séance${nb > 1 ? "s" : ""} de ${dureeSeancesTxt(dates || (existante && existante.datesSeances))} × ${euros(eleve.th)}/h`, euros(total), C.texte),
         verses > 0 ? ligneSolde("Déjà versé", "− " + euros(verses), C.green) : null,
         h("div", { style: { height: 1, background: C.surface, margin: "6px 0" } }),
         ligneSolde(reste > 0 ? "Reste à payer" : "Soldée", euros(reste), reste > 0 ? C.gold : C.green, true)),

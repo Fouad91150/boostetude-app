@@ -92,7 +92,9 @@ const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
     return !dejaVue(date, groupeDe(gid), gid);
   }).map(([k]) => {
     const [, gid, date] = k.split(":");
-    return { date, matiere: groupeDe(gid)?.matiere || "", groupeId: gid };
+    const g = groupeDe(gid);
+    // Primaire : séances de 1 h 30 (décision du 24/11/2026) ; ailleurs 2 h.
+    return { date, matiere: g?.matiere || "", groupeId: gid, ...(estPrimaire(g && g.niveau) ? { duree: 1.5 } : {}) };
   }).sort((a, b) => a.date.localeCompare(b.date))
     .map((s, _, tout) => {
       if (!offert) return s;
@@ -101,23 +103,34 @@ const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
     });
 };
 
+const NIVEAUX_PRIMAIRE_SEANCE = ["CP", "CE1", "CE2", "CM1", "CM2"];
+// Un groupe peut porter « primaire » comme niveau (groupe multi-niveaux).
+const estPrimaire = niv => !!niv && (NIVEAUX_PRIMAIRE_SEANCE.includes(niv) || /^primaire$/i.test(String(niv).trim()));
+const dureeDe = d => (d && Number(d.duree)) || 2;
+// « 2 h », « 1 h 30 » : la durée d'une séance, écrite pour les parents.
+const dureeTxt = hh => (hh % 1 ? `${Math.floor(hh)} h ${String(Math.round((hh % 1) * 60)).padStart(2, "0")}` : `${hh} h`);
+const dureeSeancesTxt = dates => {
+  const ds = [...new Set((dates || []).map(dureeDe))];
+  return dureeTxt(ds.length === 1 ? ds[0] : 2);
+};
 // Montant d'une liste de séances : les séances offertes ne se paient pas.
 const montantSeances = (dates, th) =>
-  parseFloat(((dates || []).filter(d => !d.offert).length * 2 * (Number(th) || 0)).toFixed(2));
+  parseFloat(((dates || []).filter(d => !d.offert).reduce((t, d) => t + dureeDe(d), 0) * (Number(th) || 0)).toFixed(2));
 // Regroupe une liste de séances {date,matiere} par matière, en conservant l'ordre
 // d'apparition — utilisé partout où la facture doit détailler Maths/Physique séparément.
 const groupParMatiere = dates => {
   const map = new Map();
   (dates || []).forEach(d => {
     const mat = d.matiere || "Cours";
-    if (!map.has(mat)) map.set(mat, { dates: [], offertes: [] });
+    if (!map.has(mat)) map.set(mat, { dates: [], offertes: [], duree: dureeDe(d) });
     map.get(mat).dates.push(d.date);
     if (d.offert) map.get(mat).offertes.push(d.date);
   });
   return Array.from(map, ([matiere, v]) => ({
     matiere,
     dates: v.dates,
-    offertes: v.offertes
+    offertes: v.offertes,
+    duree: v.duree
   }));
 };
 const horaireLabel = g => {
@@ -132,12 +145,12 @@ const horaireLabel = g => {
 // 100,00 € ». La dernière ligne absorbe l'arrondi pour que la somme tombe juste.
 const lignesFacture = (matieres, montant, thSecours) => {
   const payees = g => g.dates.length - ((g.offertes || []).length);
-  const heures = (matieres || []).reduce((s, g) => s + payees(g) * 2, 0);
+  const heures = (matieres || []).reduce((s, g) => s + payees(g) * (g.duree || 2), 0);
   const m = Number(montant) || 0;
   const th = heures > 0 && m > 0 ? Math.round((m / heures) * 100) / 100 : (Number(thSecours) || 0);
   let cumul = 0;
   return (matieres || []).map((g, i, tout) => {
-    const h = payees(g) * 2;
+    const h = payees(g) * (g.duree || 2);
     const total = i === tout.length - 1 && heures > 0 && m > 0
       ? Math.round((m - cumul) * 100) / 100
       : Math.round(h * th * 100) / 100;

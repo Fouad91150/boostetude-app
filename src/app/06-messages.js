@@ -36,7 +36,7 @@ const signatureBoost = "Boost'Étude";
 const makeFactureEmail = (e, mois, nb, total, dates, seuil, prestation) => ({
   sujet: `Facture ${mois} — ${e.prenom} ${e.nom} — Boost'Étude`,
   corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
-         (prestation ? `${prestation}\n` : `Séances : ${nb} × 2 h × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
+         (prestation ? `${prestation}\n` : `Séances : ${nb} × ${dureeSeancesTxt(dates)} × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
          `TOTAL : ${montantTxt(total)}\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
          `La facture détaillée est jointe en PDF.\n\n` +
@@ -48,7 +48,7 @@ const makeFactureSMS = (e, mois, nb, total, seuil, prestation) =>
   `Boost'Étude — Facture ${mois}\n` +
   (prestation
     ? `Bonjour, voici la facture de ${e.prenom} — ${prestation} : ${montantTxt(total)}.\n`
-    : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n`) +
+    : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de ${estPrimaire(e.niveau) ? "1 h 30" : "2 h"}, soit ${montantTxt(total)}.\n`) +
   `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}).\n` +
   `${mentionAutomatique(seuil)}`;
 
@@ -67,7 +67,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
          lignes +
          (prestation
            ? `• ${prestation}\n`
-           : `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n` +
+           : `• ${nb} séance${nb > 1 ? "s" : ""} de ${dureeSeancesTxt(dates)} × ${euros(e.th)}/h\n` +
              ((dates || []).some(d => d.offert)
                ? `• dont ${(dates || []).filter(d => d.offert).length === 1 ? "1 première séance offerte" : (dates || []).filter(d => d.offert).length + " premières séances offertes (une par matière)"} 🎁\n`
                : "")) +

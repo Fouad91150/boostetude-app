@@ -9,6 +9,10 @@
 
 const TAUX_HORAIRE_DEFAUT = 25;
 const HEURES_PAR_SEANCE = 2;
+// Les séances du primaire durent 1 h 30 (décision du 24/11/2026).
+const NIVEAUX_PRIMAIRE = ["CP", "CE1", "CE2", "CM1", "CM2"];
+const dureeSeanceGroupe = g => (g && estPrimaire(g.niveau) ? 1.5 : HEURES_PAR_SEANCE);
+const heuresTxt = hh => (hh % 1 ? String(Math.floor(hh)) + " h " + String(Math.round((hh % 1) * 60)).padStart(2, "0") : hh + " h");
 
 // Les séances effectivement assurées dans le mois, par professeur. Une clé
 // d'appel vide (cours créé, appel jamais enregistré) ne compte pas : rien ne
@@ -29,6 +33,7 @@ const seancesDuMois = (profId, ym, appels, groupes) => {
       return {
         date, groupeId,
         groupe: g ? g.nom : "Groupe supprimé",
+        duree: dureeSeanceGroupe(g),
         presents: Object.values(appels[cle] || {}).filter(v => v === "present").length
       };
     })
@@ -47,7 +52,7 @@ const tauxDe = p => {
 
 const duAuProf = (prof, ym, appels, groupes) => {
   const seances = seancesDuMois(prof.id, ym, appels, groupes);
-  const heures = seances.length * HEURES_PAR_SEANCE;
+  const heures = seances.reduce((t, x) => t + (x.duree || HEURES_PAR_SEANCE), 0);
   return { seances, heures, montant: Math.round(heures * tauxDe(prof) * 100) / 100 };
 };
 
@@ -57,15 +62,15 @@ const makeRemunerationWhatsApp = (prof, ym, seances, heures, montant, taux) =>
   `*Boost'Étude — ${ml(ym)}*\n\n` +
   `Bonjour ${prof.prenom || ""},\n\n`.replace("  ", " ") +
   `Voici le récapitulatif de tes séances :\n` +
-  seances.map(s => `• ${fmtDateCourt(s.date)} — ${s.groupe} (${s.presents} présent${s.presents > 1 ? "s" : ""})`).join("\n") +
+  seances.map(s => `• ${fmtDateCourt(s.date)} — ${s.groupe}, ${heuresTxt(s.duree || HEURES_PAR_SEANCE)} (${s.presents} présent${s.presents > 1 ? "s" : ""})`).join("\n") +
   `\n\n` +
-  `• ${seances.length} séance${seances.length > 1 ? "s" : ""} de ${HEURES_PAR_SEANCE} h, soit *${heures} h*\n` +
+  `• ${seances.length} séance${seances.length > 1 ? "s" : ""}, soit *${heuresTxt(heures)}*\n` +
   `• ${montantTxt(taux)}/h\n` +
   `• *Total : ${montantTxt(montant)}*\n\n` +
   `Merci pour ton travail de ce mois-ci.\n` +
   `Boost'Étude`;
 
-function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial }) {
+function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial, onReloadProfs }) {
   const [mois, setMois] = useState(moisInitial || nowYM());
   const [edition, setEdition] = useState(null);   // { id, champ, valeur }
   const [deplie, setDeplie] = useState(null);
@@ -130,8 +135,9 @@ function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, mois
   };
 
   return h("div", null,
+    h(CarteComptesProfs, { profs, onChange: onReloadProfs }),
     h("div", { style: { fontSize: 13.5, color: C.gray, lineHeight: 1.6, marginBottom: 14 } },
-      "Chaque séance dont l'appel a été enregistré compte ", h("strong", null, `${HEURES_PAR_SEANCE} heures`),
+      "Chaque séance dont l'appel a été enregistré compte ", h("strong", null, `${HEURES_PAR_SEANCE} heures`), " (", h("strong", null, "1 h 30"), " en primaire)",
       ", quel que soit le nombre d'élèves présents. Une séance sans appel n'est ni facturée au parent, ni rémunérée."),
 
     h("div", { style: { display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 } },
@@ -171,7 +177,7 @@ function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, mois
                   h("div", { style: { fontSize: 16, fontWeight: 700, color: C.texte, fontFamily: FD } },
                     [p.prenom, p.nom].filter(Boolean).join(" ") || p.email),
                   h("div", { style: { fontSize: 12.5, color: C.gray, marginTop: 3 } },
-                    `${seances.length} séance${seances.length > 1 ? "s" : ""} · ${heures} h · ${montantTxt(tauxDe(p))}/h`)),
+                    `${seances.length} séance${seances.length > 1 ? "s" : ""} · ${heuresTxt(heures)} · ${montantTxt(tauxDe(p))}/h`)),
                 h("div", { style: { fontSize: 20, fontWeight: 700, color: montant > 0 ? C.texte : C.grisClair, fontFamily: FD, whiteSpace: "nowrap" } },
                   euros(montant))),
 

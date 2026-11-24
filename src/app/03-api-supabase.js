@@ -199,7 +199,7 @@ const api = {
     const {
       data,
       error
-    } = await sb.from("profs").select("id,prenom,nom,email,role,taux_horaire,telephone").order("nom");
+    } = await sb.from("profs").select("id,prenom,nom,email,role,taux_horaire,telephone,identifiant").order("nom");
     if (error) throw error;
     return data || [];
   },

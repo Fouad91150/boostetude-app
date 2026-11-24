@@ -119,12 +119,12 @@ function App() {
       const {
         error
       } = await sb.auth.signInWithPassword({
-        email,
+        email: emailDeConnexion(email),
         password
       });
       if (error) throw error;
     } catch (e) {
-      setAuthError(e.message === "Invalid login credentials" ? "Email ou mot de passe incorrect." : e.message);
+      setAuthError(e.message === "Invalid login credentials" ? "Identifiant ou mot de passe incorrect." : e.message);
     }
     setAuthLoading(false);
   };
@@ -565,7 +565,8 @@ function App() {
     onSaveParametres: handleSaveParametres,
     onExportComplet: handleExportComplet,
     onSaveTaux: handleSaveTaux,
-    onSaveTel: handleSaveTel
+    onSaveTel: handleSaveTel,
+    onReloadProfs: async () => setProfs(await api.fetchProfs())
   })), TABS.length > 1 && /*#__PURE__*/React.createElement("div", {
     // La barre du bas : blanche, posée sur un filet, avec des libellés lisibles.
     // Huit onglets tiennent sur un écran de téléphone à condition de resserrer
