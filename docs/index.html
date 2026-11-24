@@ -72,8 +72,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.9.0";
-window.__APP_BUILD = "2026-11-21";
+<script>window.__APP_VERSION = "3.11.0";
+window.__APP_BUILD = "2026-11-24";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjdnZwemNjemJld2R1aWV4dXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyOTExMTIsImV4cCI6MjA5NDg2NzExMn0.m0fvpAJk1EfF-wcSDOJ3qA6YEP_h0dYEOC9F7Onn0ZE";
@@ -501,7 +501,7 @@ const api = {
     const {
       data,
       error
-    } = await sb.from("profs").select("id,prenom,nom,email,role,taux_horaire,telephone").order("nom");
+    } = await sb.from("profs").select("id,prenom,nom,email,role,taux_horaire,telephone,identifiant").order("nom");
     if (error) throw error;
     return data || [];
   },
@@ -1241,7 +1241,9 @@ const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
     return !dejaVue(date, groupeDe(gid), gid);
   }).map(([k]) => {
     const [, gid, date] = k.split(":");
-    return { date, matiere: groupeDe(gid)?.matiere || "", groupeId: gid };
+    const g = groupeDe(gid);
+    // Primaire : séances de 1 h 30 (décision du 24/11/2026) ; ailleurs 2 h.
+    return { date, matiere: g?.matiere || "", groupeId: gid, ...(estPrimaire(g && g.niveau) ? { duree: 1.5 } : {}) };
   }).sort((a, b) => a.date.localeCompare(b.date))
     .map((s, _, tout) => {
       if (!offert) return s;
@@ -1250,23 +1252,34 @@ const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
     });
 };
 
+const NIVEAUX_PRIMAIRE_SEANCE = ["CP", "CE1", "CE2", "CM1", "CM2"];
+// Un groupe peut porter « primaire » comme niveau (groupe multi-niveaux).
+const estPrimaire = niv => !!niv && (NIVEAUX_PRIMAIRE_SEANCE.includes(niv) || /^primaire$/i.test(String(niv).trim()));
+const dureeDe = d => (d && Number(d.duree)) || 2;
+// « 2 h », « 1 h 30 » : la durée d'une séance, écrite pour les parents.
+const dureeTxt = hh => (hh % 1 ? `${Math.floor(hh)} h ${String(Math.round((hh % 1) * 60)).padStart(2, "0")}` : `${hh} h`);
+const dureeSeancesTxt = dates => {
+  const ds = [...new Set((dates || []).map(dureeDe))];
+  return dureeTxt(ds.length === 1 ? ds[0] : 2);
+};
 // Montant d'une liste de séances : les séances offertes ne se paient pas.
 const montantSeances = (dates, th) =>
-  parseFloat(((dates || []).filter(d => !d.offert).length * 2 * (Number(th) || 0)).toFixed(2));
+  parseFloat(((dates || []).filter(d => !d.offert).reduce((t, d) => t + dureeDe(d), 0) * (Number(th) || 0)).toFixed(2));
 // Regroupe une liste de séances {date,matiere} par matière, en conservant l'ordre
 // d'apparition — utilisé partout où la facture doit détailler Maths/Physique séparément.
 const groupParMatiere = dates => {
   const map = new Map();
   (dates || []).forEach(d => {
     const mat = d.matiere || "Cours";
-    if (!map.has(mat)) map.set(mat, { dates: [], offertes: [] });
+    if (!map.has(mat)) map.set(mat, { dates: [], offertes: [], duree: dureeDe(d) });
     map.get(mat).dates.push(d.date);
     if (d.offert) map.get(mat).offertes.push(d.date);
   });
   return Array.from(map, ([matiere, v]) => ({
     matiere,
     dates: v.dates,
-    offertes: v.offertes
+    offertes: v.offertes,
+    duree: v.duree
   }));
 };
 const horaireLabel = g => {
@@ -1281,12 +1294,12 @@ const horaireLabel = g => {
 // 100,00 € ». La dernière ligne absorbe l'arrondi pour que la somme tombe juste.
 const lignesFacture = (matieres, montant, thSecours) => {
   const payees = g => g.dates.length - ((g.offertes || []).length);
-  const heures = (matieres || []).reduce((s, g) => s + payees(g) * 2, 0);
+  const heures = (matieres || []).reduce((s, g) => s + payees(g) * (g.duree || 2), 0);
   const m = Number(montant) || 0;
   const th = heures > 0 && m > 0 ? Math.round((m / heures) * 100) / 100 : (Number(thSecours) || 0);
   let cumul = 0;
   return (matieres || []).map((g, i, tout) => {
-    const h = payees(g) * 2;
+    const h = payees(g) * (g.duree || 2);
     const total = i === tout.length - 1 && heures > 0 && m > 0
       ? Math.round((m - cumul) * 100) / 100
       : Math.round(h * th * 100) / 100;
@@ -1361,7 +1374,7 @@ const signatureBoost = "Boost'Étude";
 const makeFactureEmail = (e, mois, nb, total, dates, seuil, prestation) => ({
   sujet: `Facture ${mois} — ${e.prenom} ${e.nom} — Boost'Étude`,
   corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
-         (prestation ? `${prestation}\n` : `Séances : ${nb} × 2 h × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
+         (prestation ? `${prestation}\n` : `Séances : ${nb} × ${dureeSeancesTxt(dates)} × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
          `TOTAL : ${montantTxt(total)}\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
          `La facture détaillée est jointe en PDF.\n\n` +
@@ -1373,7 +1386,7 @@ const makeFactureSMS = (e, mois, nb, total, seuil, prestation) =>
   `Boost'Étude — Facture ${mois}\n` +
   (prestation
     ? `Bonjour, voici la facture de ${e.prenom} — ${prestation} : ${montantTxt(total)}.\n`
-    : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de 2 h, soit ${montantTxt(total)}.\n`) +
+    : `Bonjour, voici la facture de ${e.prenom} : ${nb} séance${nb > 1 ? "s" : ""} de ${estPrimaire(e.niveau) ? "1 h 30" : "2 h"}, soit ${montantTxt(total)}.\n`) +
   `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}).\n` +
   `${mentionAutomatique(seuil)}`;
 
@@ -1392,7 +1405,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
          lignes +
          (prestation
            ? `• ${prestation}\n`
-           : `• ${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(e.th)}/h\n` +
+           : `• ${nb} séance${nb > 1 ? "s" : ""} de ${dureeSeancesTxt(dates)} × ${euros(e.th)}/h\n` +
              ((dates || []).some(d => d.offert)
                ? `• dont ${(dates || []).filter(d => d.offert).length === 1 ? "1 première séance offerte" : (dates || []).filter(d => d.offert).length + " premières séances offertes (une par matière)"} 🎁\n`
                : "")) +
@@ -1792,7 +1805,7 @@ function LoginScreen({ onLogin, error, loading }) {
       h("form", {
         onSubmit: e => { e.preventDefault(); if (pret) onLogin(email, password); }
       },
-        h(InputText, { label: "Email", value: email, onChange: setEmail, placeholder: "prenom@boostetude.fr", type: "email" }),
+        h(InputText, { label: "Identifiant ou e-mail", value: email, onChange: setEmail, placeholder: "k.nom ou prenom@boostetude.fr", type: "text" }),
         h(InputText, { label: "Mot de passe", value: password, onChange: setPassword, placeholder: "••••••••", type: "password" }),
         error
           ? h("div", {
@@ -2832,7 +2845,7 @@ function FicheEleve({
       ...(eleve.remise > 0 ? [["Tarif normal", euros(eleve.thBase) + "/h"],
         ["Remise", `− ${euros(eleve.remise)}/h (${(eleve.motifsRemise || []).join(" + ")})`]] : []),
       ...(eleve.part != null && eleve.part !== 1 ? [["Tarif spécial", LIBELLE_PART(eleve.part)]] : []),
-      ...(eleve.part === 0 ? [] : [["Tarif horaire", euros(eleve.th) + "/h"], ["Séance de 2 h", euros(eleve.th * 2)]]),
+      ...(eleve.part === 0 ? [] : [["Tarif horaire", euros(eleve.th) + "/h"], estPrimaire(eleve.niveau) ? ["Séance de 1 h 30", euros(eleve.th * 1.5)] : ["Séance de 2 h", euros(eleve.th * 2)]]),
       ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
@@ -4225,7 +4238,7 @@ function ModaleFacture({
 
       // ── Où en est cette facture ──────────────────────────────
       h("div", { style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16 } },
-        ligneSolde(`${nb} séance${nb > 1 ? "s" : ""} de 2 h × ${euros(eleve.th)}/h`, euros(total), C.texte),
+        ligneSolde(`${nb} séance${nb > 1 ? "s" : ""} de ${dureeSeancesTxt(dates || (existante && existante.datesSeances))} × ${euros(eleve.th)}/h`, euros(total), C.texte),
         verses > 0 ? ligneSolde("Déjà versé", "− " + euros(verses), C.green) : null,
         h("div", { style: { height: 1, background: C.surface, margin: "6px 0" } }),
         ligneSolde(reste > 0 ? "Reste à payer" : "Soldée", euros(reste), reste > 0 ? C.gold : C.green, true)),
@@ -4589,7 +4602,7 @@ function construireFacturePDF(facture, eleve, parametres) {
       const total = g.total;
       page.texte(M + 10, y + 4, `${g.matiere || "Cours"} — ${eleve.niveau}`, { taille: 10, gras: true, couleur: NOIR });
       page.texte(M + 10, y + 16,
-        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
+        `Cours de soutien scolaire en groupe · séances de ${dureeTxt(g.duree || 2)} · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
         ((g.offertes || []).length ? ` · 1re séance offerte (${(g.offertes || []).map(d => fmtDateCourt(d)).join(", ")})` : "") +
         (eleve.remise > 0 && Math.abs(g.th - eleve.th) < 0.005 ? ` · remise de ${euros(eleve.remise)}/h (${(eleve.motifsRemise || ["inscriptions multiples"]).join(" + ")})` : ""),
         { taille: 8, couleur: GRIS });
@@ -4934,7 +4947,7 @@ function VueImpression({
                     h("td", { style: { padding: "12px" } },
                       h("div", { style: { fontWeight: 600, color: "#222" } }, `${g.matiere || "Cours"} — ${eleve.niveau}`),
                       h("div", { style: { fontSize: 11, color: "#888", marginTop: 2 } },
-                        `Cours de soutien scolaire en groupe · séances de 2 h · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
+                        `Cours de soutien scolaire en groupe · séances de ${dureeTxt(g.duree || 2)} · ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}` +
                         ((g.offertes || []).length ? ` · 1re séance offerte (${(g.offertes || []).map(d => fmtDateCourt(d)).join(", ")}) 🎁` : "")),
                       h("div", { style: { fontSize: 11, color: "#999", marginTop: 4, lineHeight: 1.6 } },
                         g.dates.map(d => fmtDateCourt(d)).join(" · "))),
@@ -6800,6 +6813,249 @@ function ModuleDashboard({
     }
   }, a.s === "absent_nj" ? "Non justifié" : "Justifié")))));
 }
+// ─── COURS EN LIGNE : ENREGISTRER SA VOIX ────────────────────
+// Réglages → « 🎙 Cours en ligne ». Fouad choisit un cours, voit la diapo et le
+// texte à lire (préparé à l'avance), s'enregistre au micro, réécoute, garde.
+// L'élève entend ensuite SA voix sur chaque diapo de l'espace élève.
+// Fichiers : bucket privé « cours », dossier audio/<cours>/<n°>.<ext> ;
+// chemins rangés dans documents.audios (une case par diapo).
+const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+let pdfjsPromesse = null;
+const chargerPdfjs = () => pdfjsPromesse || (pdfjsPromesse = new Promise((ok, ko) => {
+  if (window.pdfjsLib) return ok(window.pdfjsLib);
+  const s = document.createElement("script");
+  s.src = PDFJS_URL;
+  s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; ok(window.pdfjsLib); };
+  s.onerror = () => { pdfjsPromesse = null; ko(new Error("Lecteur de diapos indisponible (réseau)")); };
+  document.head.appendChild(s);
+}));
+
+// Format d'enregistrement lisible partout : mp4 (iPhone, Chrome récent), sinon webm.
+const formatAudio = () => {
+  const R = window.MediaRecorder;
+  if (!R || !R.isTypeSupported) return { type: "", ext: "webm" };
+  for (const [type, ext] of [["audio/mp4", "m4a"], ["audio/webm;codecs=opus", "webm"], ["audio/webm", "webm"], ["audio/ogg;codecs=opus", "ogg"]])
+    if (R.isTypeSupported(type)) return { type, ext };
+  return { type: "", ext: "webm" };
+};
+const cheminAudio = (doc, n, ext) => `audio/${(doc.url || doc.id).replace(/\.pdf$/i, "")}/${String(n).padStart(2, "0")}-${Date.now().toString(36)}.${ext}`;
+
+const apiCours = {
+  async liste() {
+    const { data, error } = await sb.from("documents")
+      .select("id,titre,niveau,matiere,url,ordre,nb_pages,narration,audios").order("niveau").order("ordre");
+    if (error) throw error;
+    return data || [];
+  },
+  async urlSignee(chemin) {
+    const { data, error } = await sb.storage.from("cours").createSignedUrl(chemin, 3600);
+    if (error) throw error;
+    return data.signedUrl;
+  },
+  async enregistrerAudio(doc, n, blob, ext) {
+    const chemin = cheminAudio(doc, n, ext);
+    const { error } = await sb.storage.from("cours").upload(chemin, blob, { contentType: (blob.type || "audio/webm").split(";")[0], upsert: true });
+    if (error) throw error;
+    const audios = Array.from({ length: Math.max(doc.nb_pages || 0, n, (doc.audios || []).length) }, (_, i) => (doc.audios || [])[i] || null);
+    const ancien = audios[n - 1];
+    audios[n - 1] = chemin;
+    const { error: e2 } = await sb.from("documents").update({ audios }).eq("id", doc.id);
+    if (e2) throw e2;
+    if (ancien) sb.storage.from("cours").remove([ancien]).catch(() => {});
+    return audios;
+  },
+  async retirerAudio(doc, n) {
+    const audios = [...(doc.audios || [])];
+    const ancien = audios[n - 1];
+    audios[n - 1] = null;
+    const { error } = await sb.from("documents").update({ audios }).eq("id", doc.id);
+    if (error) throw error;
+    if (ancien) sb.storage.from("cours").remove([ancien]).catch(() => {});
+    return audios;
+  }
+};
+const nbAudios = d => (d.audios || []).filter(Boolean).length;
+
+function OngletCoursEnLigne() {
+  const [cours, setCours] = useState(null);
+  const [erreur, setErreur] = useState("");
+  const [choisi, setChoisi] = useState(null);
+  const recharger = () => apiCours.liste().then(setCours).catch(e => setErreur(e.message || String(e)));
+  useEffect(() => { recharger(); }, []);
+  if (choisi) return h(StudioEnregistrement, {
+    doc: choisi,
+    onMaj: d => { setChoisi(d); setCours(l => (l || []).map(x => x.id === d.id ? d : x)); },
+    onRetour: () => setChoisi(null)
+  });
+  if (erreur) return h("div", { style: { color: C.red, fontSize: 14 } }, "Impossible de charger les cours : ", erreur);
+  if (!cours) return h("div", { style: { color: C.gray, fontSize: 14 } }, "Chargement des cours…");
+  const parNiveau = {};
+  cours.forEach(d => { (parNiveau[d.niveau] ||= []).push(d); });
+  return h("div", null,
+    h("div", { style: { fontSize: 13, color: C.gray, marginBottom: 12, lineHeight: 1.5 } },
+      "Enregistre ta voix diapo par diapo : tes élèves l'entendront dans leur espace élève en appuyant sur « Écouter ». ",
+      "Les diapos sans enregistrement sont lues par la voix du téléphone quand un texte est prévu."),
+    Object.entries(parNiveau).map(([niv, l]) => h("div", { key: niv, style: { marginBottom: 14 } },
+      h("div", { style: { fontSize: 12, fontWeight: 700, color: C.gold, margin: "4px 0 8px" } }, niv),
+      l.map(d => h("button", {
+        key: d.id, onClick: () => setChoisi(d),
+        style: { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: C.surface,
+          border: `1px solid ${C.bord}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer",
+          fontFamily: "inherit", color: C.texte }
+      },
+        h("span", { style: { flex: 1 } },
+          h("div", { style: { fontWeight: 700, fontSize: 14.5 } }, d.titre),
+          h("div", { style: { fontSize: 12, color: C.gray, marginTop: 2 } },
+            `${d.nb_pages || "?"} diapos`,
+            Array.isArray(d.narration) && d.narration.length ? " · texte prêt" : "",
+            nbAudios(d) ? ` · 🎙 ${nbAudios(d)}/${d.nb_pages || "?"} enregistrées` : "")),
+        h("span", { style: { color: C.gold, fontSize: 20 } }, "›"))))));
+}
+
+function StudioEnregistrement({ doc, onMaj, onRetour }) {
+  const [pdf, setPdf] = useState(null);
+  const [page, setPage] = useState(1);
+  const [etat, setEtat] = useState("pret"); // pret | enregistre | apercu | envoi
+  const [apercu, setApercu] = useState(null); // { blob, url, ext }
+  const [secondes, setSecondes] = useState(0);
+  const [message, setMessage] = useState("");
+  const [urlExistante, setUrlExistante] = useState(null);
+  const canvasRef = React.useRef(null);
+  const enreg = React.useRef(null);
+  const n = doc.nb_pages || (pdf ? pdf.numPages : 0);
+  const texte = (doc.narration || [])[page - 1];
+  const dejaEnregistree = !!(doc.audios || [])[page - 1];
+
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      try {
+        const lib = await chargerPdfjs();
+        const url = await apiCours.urlSignee(doc.url);
+        const p = await lib.getDocument({ url }).promise;
+        if (!annule) setPdf(p);
+      } catch (e) { if (!annule) setMessage(e.message || String(e)); }
+    })();
+    return () => { annule = true; arreterMicro(); };
+  }, [doc.id]);
+
+  useEffect(() => {
+    if (!pdf || !canvasRef.current) return;
+    let annule = false;
+    pdf.getPage(page).then(pg => {
+      if (annule) return;
+      const c = canvasRef.current;
+      const largeur = Math.min(c.parentElement.clientWidth || 600, 900);
+      const base = pg.getViewport({ scale: 1 });
+      const vp = pg.getViewport({ scale: (largeur / base.width) * Math.min(window.devicePixelRatio || 1, 2) });
+      c.width = vp.width; c.height = vp.height; c.style.width = largeur + "px";
+      pg.render({ canvasContext: c.getContext("2d"), viewport: vp });
+    });
+    return () => { annule = true; };
+  }, [pdf, page]);
+
+  useEffect(() => {
+    setUrlExistante(null);
+    const chemin = (doc.audios || [])[page - 1];
+    if (chemin) apiCours.urlSignee(chemin).then(setUrlExistante).catch(() => {});
+  }, [page, (doc.audios || [])[page - 1]]);
+
+  const arreterMicro = () => {
+    const e = enreg.current;
+    if (e) { clearInterval(e.minuteur); try { if (e.rec.state !== "inactive") e.rec.stop(); } catch (_) {} e.flux.getTracks().forEach(t => t.stop()); }
+    enreg.current = null;
+  };
+  const demarrer = async () => {
+    setMessage("");
+    if (apercu) { URL.revokeObjectURL(apercu.url); setApercu(null); }
+    try {
+      const flux = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const f = formatAudio();
+      const rec = new MediaRecorder(flux, f.type ? { mimeType: f.type } : undefined);
+      const morceaux = [];
+      rec.ondataavailable = ev => { if (ev.data && ev.data.size) morceaux.push(ev.data); };
+      rec.onstop = () => {
+        const blob = new Blob(morceaux, { type: rec.mimeType || f.type || "audio/webm" });
+        const ext = /mp4|m4a|aac/.test(blob.type) ? "m4a" : /ogg/.test(blob.type) ? "ogg" : "webm";
+        setApercu({ blob, url: URL.createObjectURL(blob), ext });
+        setEtat("apercu");
+      };
+      const debut = Date.now();
+      setSecondes(0);
+      enreg.current = { rec, flux, minuteur: setInterval(() => setSecondes(Math.round((Date.now() - debut) / 1000)), 500) };
+      rec.start();
+      setEtat("enregistre");
+    } catch (e) {
+      setMessage("Micro indisponible : autorise l'accès au micro pour cette page, puis réessaie.");
+    }
+  };
+  const arreter = () => arreterMicro();
+  const garder = async (suivante) => {
+    if (!apercu) return;
+    setEtat("envoi");
+    try {
+      const audios = await apiCours.enregistrerAudio(doc, page, apercu.blob, apercu.ext);
+      onMaj({ ...doc, audios });
+      URL.revokeObjectURL(apercu.url);
+      setApercu(null); setEtat("pret");
+      signalerSucces(`Diapo ${page} enregistrée ✔`);
+      if (suivante && page < n) setPage(page + 1);
+    } catch (e) { setEtat("apercu"); setMessage("Envoi impossible : " + (e.message || e)); }
+  };
+  const recommencer = () => { if (apercu) URL.revokeObjectURL(apercu.url); setApercu(null); setEtat("pret"); };
+  const retirer = async () => {
+    if (!window.confirm(`Supprimer l'enregistrement de la diapo ${page} ?`)) return;
+    try { const audios = await apiCours.retirerAudio(doc, page); onMaj({ ...doc, audios }); }
+    catch (e) { setMessage(e.message || String(e)); }
+  };
+  const aller = d => { if (etat === "enregistre" || etat === "envoi") return; recommencer(); setPage(p => Math.min(n || 1, Math.max(1, p + d))); };
+
+  const btn = (label, onClick, style = {}, disabled) => h("button", {
+    onClick, disabled,
+    style: { flex: 1, padding: "13px 12px", borderRadius: 12, border: `1px solid ${C.bord}`, background: C.surface,
+      color: C.texte, fontSize: 15, fontWeight: 700, cursor: disabled ? "default" : "pointer", fontFamily: "inherit",
+      opacity: disabled ? .5 : 1, ...style }
+  }, label);
+
+  return h("div", null,
+    h("button", { onClick: () => { arreterMicro(); onRetour(); },
+      style: { background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 15, padding: 0, marginBottom: 10, fontFamily: "inherit" } },
+      "← Tous les cours"),
+    h("div", { style: { fontWeight: 800, fontSize: 18, color: C.texte } }, doc.titre),
+    h("div", { style: { fontSize: 12.5, color: C.gray, margin: "2px 0 10px" } },
+      `${doc.niveau} · 🎙 ${nbAudios(doc)}/${n || "?"} diapos enregistrées`),
+    h("div", { style: { background: "#11151f", borderRadius: 12, padding: 6, marginBottom: 10, minHeight: 80 } },
+      pdf ? h("canvas", { ref: canvasRef, style: { display: "block", maxWidth: "100%", margin: "0 auto", borderRadius: 6, background: "#fff" } })
+          : h("div", { style: { color: "#c9cfdb", textAlign: "center", padding: 30, fontSize: 13 } }, message || "Ouverture des diapos…")),
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
+      btn("‹", () => aller(-1), { flex: "0 0 56px" }, page <= 1),
+      h("div", { style: { flex: 1, textAlign: "center", fontWeight: 800, color: C.texte } },
+        `Diapo ${page} / ${n || "?"}`, dejaEnregistree ? h("span", { style: { color: C.green } }, "  ✔") : null),
+      btn("›", () => aller(1), { flex: "0 0 56px" }, page >= n)),
+    texte && h("div", { style: { background: C.goldPale || "#fbf6e6", border: `1px solid ${C.goldBord || C.bord}`, borderRadius: 12,
+      padding: "12px 14px", fontSize: 16, lineHeight: 1.6, color: C.texte, marginBottom: 10, maxHeight: 260, overflowY: "auto" } },
+      h("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.gold, marginBottom: 4 } }, "TEXTE À LIRE (tu peux t'en écarter librement)"),
+      texte),
+    etat === "pret" && h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+      btn(dejaEnregistree ? "⏺ Réenregistrer" : "⏺ Enregistrer", demarrer, { background: C.red, color: "#fff", border: "none" })),
+    etat === "enregistre" && h("div", { style: { display: "flex", gap: 8 } },
+      btn(`⏹ Arrêter (${Math.floor(secondes / 60)}:${String(secondes % 60).padStart(2, "0")})`, arreter, { background: C.navy, color: "#fff", border: "none" })),
+    etat === "apercu" && apercu && h("div", null,
+      h("audio", { src: apercu.url, controls: true, style: { width: "100%", marginBottom: 8 } }),
+      h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+        btn("↺ Recommencer", recommencer),
+        btn(page < n ? "✅ Garder et diapo suivante" : "✅ Garder", () => garder(true), { background: C.green, color: "#fff", border: "none" }))),
+    etat === "envoi" && h("div", { style: { color: C.gray, textAlign: "center", padding: 12 } }, "Envoi en cours…"),
+    etat === "pret" && urlExistante && h("div", { style: { marginTop: 10 } },
+      h("div", { style: { fontSize: 12, color: C.gray, marginBottom: 4 } }, "Enregistrement actuel de cette diapo :"),
+      h("audio", { src: urlExistante, controls: true, style: { width: "100%" } }),
+      h("button", { onClick: retirer, style: { background: "none", border: "none", color: C.red, fontSize: 13, cursor: "pointer", padding: "6px 0", fontFamily: "inherit" } },
+        "Supprimer cet enregistrement")),
+    message && pdf && h("div", { style: { color: C.red, fontSize: 13, marginTop: 8 } }, message),
+    h("div", { style: { fontSize: 12, color: C.gray, marginTop: 14, lineHeight: 1.5 } },
+      "Astuce : enregistre dans une pièce calme, téléphone à 20 cm de la bouche. Une diapo = un enregistrement : si tu te trompes, appuie sur « Recommencer »."));
+}
 // ─── MODULE RÉGLAGES ─────────────────────────────────────────
 // Trois choses que l'application ne pouvait pas faire jusqu'ici :
 //  · saisir les mentions légales sans qu'elles soient écrites en dur dans un
@@ -7086,13 +7342,14 @@ function OngletDonnees({ eleves, groupes, appels, factures, onExportComplet }) {
   );
 }
 
-function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaissements, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel }) {
+function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaissements, profs, onSaveParametres, onExportComplet, onSaveTaux, onSaveTel, onReloadProfs }) {
   const [onglet, setOnglet] = useState("entreprise");
   const onglets = [
     { k: "entreprise", l: "🏛 Entreprise" },
     { k: "profs", l: "👥 Professeurs" },
     { k: "recettes", l: "📒 Recettes" },
-    { k: "donnees", l: "🗄 Données" }
+    { k: "donnees", l: "🗄 Données" },
+    { k: "cours", l: "🎙 Cours en ligne" }
   ];
   return h("div", null,
     h("div", { style: { display: "flex", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 } },
@@ -7108,9 +7365,10 @@ function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaiss
         }
       }, l))),
     onglet === "entreprise" && h(OngletEntreprise, { parametres, onSave: onSaveParametres }),
-    onglet === "profs" && h(OngletProfesseurs, { profs, groupes, appels, onSaveTaux, onSaveTel }),
+    onglet === "profs" && h(OngletProfesseurs, { profs, groupes, appels, onSaveTaux, onSaveTel, onReloadProfs }),
     onglet === "recettes" && h(OngletLivreRecettes, { factures, eleves, encaissements }),
-    onglet === "donnees" && h(OngletDonnees, { eleves, groupes, appels, factures, onExportComplet })
+    onglet === "donnees" && h(OngletDonnees, { eleves, groupes, appels, factures, onExportComplet }),
+    onglet === "cours" && h(OngletCoursEnLigne, null)
   );
 }
 // ─── RÉMUNÉRATION DES PROFESSEURS ────────────────────────────
@@ -7124,6 +7382,10 @@ function ModuleReglages({ parametres, eleves, groupes, appels, factures, encaiss
 
 const TAUX_HORAIRE_DEFAUT = 25;
 const HEURES_PAR_SEANCE = 2;
+// Les séances du primaire durent 1 h 30 (décision du 24/11/2026).
+const NIVEAUX_PRIMAIRE = ["CP", "CE1", "CE2", "CM1", "CM2"];
+const dureeSeanceGroupe = g => (g && estPrimaire(g.niveau) ? 1.5 : HEURES_PAR_SEANCE);
+const heuresTxt = hh => (hh % 1 ? String(Math.floor(hh)) + " h " + String(Math.round((hh % 1) * 60)).padStart(2, "0") : hh + " h");
 
 // Les séances effectivement assurées dans le mois, par professeur. Une clé
 // d'appel vide (cours créé, appel jamais enregistré) ne compte pas : rien ne
@@ -7144,6 +7406,7 @@ const seancesDuMois = (profId, ym, appels, groupes) => {
       return {
         date, groupeId,
         groupe: g ? g.nom : "Groupe supprimé",
+        duree: dureeSeanceGroupe(g),
         presents: Object.values(appels[cle] || {}).filter(v => v === "present").length
       };
     })
@@ -7162,7 +7425,7 @@ const tauxDe = p => {
 
 const duAuProf = (prof, ym, appels, groupes) => {
   const seances = seancesDuMois(prof.id, ym, appels, groupes);
-  const heures = seances.length * HEURES_PAR_SEANCE;
+  const heures = seances.reduce((t, x) => t + (x.duree || HEURES_PAR_SEANCE), 0);
   return { seances, heures, montant: Math.round(heures * tauxDe(prof) * 100) / 100 };
 };
 
@@ -7172,15 +7435,15 @@ const makeRemunerationWhatsApp = (prof, ym, seances, heures, montant, taux) =>
   `*Boost'Étude — ${ml(ym)}*\n\n` +
   `Bonjour ${prof.prenom || ""},\n\n`.replace("  ", " ") +
   `Voici le récapitulatif de tes séances :\n` +
-  seances.map(s => `• ${fmtDateCourt(s.date)} — ${s.groupe} (${s.presents} présent${s.presents > 1 ? "s" : ""})`).join("\n") +
+  seances.map(s => `• ${fmtDateCourt(s.date)} — ${s.groupe}, ${heuresTxt(s.duree || HEURES_PAR_SEANCE)} (${s.presents} présent${s.presents > 1 ? "s" : ""})`).join("\n") +
   `\n\n` +
-  `• ${seances.length} séance${seances.length > 1 ? "s" : ""} de ${HEURES_PAR_SEANCE} h, soit *${heures} h*\n` +
+  `• ${seances.length} séance${seances.length > 1 ? "s" : ""}, soit *${heuresTxt(heures)}*\n` +
   `• ${montantTxt(taux)}/h\n` +
   `• *Total : ${montantTxt(montant)}*\n\n` +
   `Merci pour ton travail de ce mois-ci.\n` +
   `Boost'Étude`;
 
-function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial }) {
+function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, moisInitial, onReloadProfs }) {
   const [mois, setMois] = useState(moisInitial || nowYM());
   const [edition, setEdition] = useState(null);   // { id, champ, valeur }
   const [deplie, setDeplie] = useState(null);
@@ -7245,8 +7508,9 @@ function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, mois
   };
 
   return h("div", null,
+    h(CarteComptesProfs, { profs, onChange: onReloadProfs }),
     h("div", { style: { fontSize: 13.5, color: C.gray, lineHeight: 1.6, marginBottom: 14 } },
-      "Chaque séance dont l'appel a été enregistré compte ", h("strong", null, `${HEURES_PAR_SEANCE} heures`),
+      "Chaque séance dont l'appel a été enregistré compte ", h("strong", null, `${HEURES_PAR_SEANCE} heures`), " (", h("strong", null, "1 h 30"), " en primaire)",
       ", quel que soit le nombre d'élèves présents. Une séance sans appel n'est ni facturée au parent, ni rémunérée."),
 
     h("div", { style: { display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 } },
@@ -7286,7 +7550,7 @@ function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, mois
                   h("div", { style: { fontSize: 16, fontWeight: 700, color: C.texte, fontFamily: FD } },
                     [p.prenom, p.nom].filter(Boolean).join(" ") || p.email),
                   h("div", { style: { fontSize: 12.5, color: C.gray, marginTop: 3 } },
-                    `${seances.length} séance${seances.length > 1 ? "s" : ""} · ${heures} h · ${montantTxt(tauxDe(p))}/h`)),
+                    `${seances.length} séance${seances.length > 1 ? "s" : ""} · ${heuresTxt(heures)} · ${montantTxt(tauxDe(p))}/h`)),
                 h("div", { style: { fontSize: 20, fontWeight: 700, color: montant > 0 ? C.texte : C.grisClair, fontFamily: FD, whiteSpace: "nowrap" } },
                   euros(montant))),
 
@@ -7353,6 +7617,104 @@ function OngletProfesseurs({ profs, groupes, appels, onSaveTaux, onSaveTel, mois
           h("div", { style: { fontSize: 12.5, color: C.grisClair, lineHeight: 1.6, marginTop: 14 } },
             "Ces montants ne sont pas des factures : ils récapitulent ce que vous devez. ",
             "Un professeur auto-entrepreneur vous adressera sa propre facture — ce décompte sert à la vérifier.")));
+}
+// ─── COMPTES PROFESSEURS ─────────────────────────────────────
+// Réglages → Professeurs : Fouad crée lui-même le compte d'un nouveau
+// professeur (identifiant « k.nom » + mot de passe), l'envoie sur WhatsApp, et
+// lui confie ensuite ses groupes (fiche du groupe → « Professeur assigné »).
+// Le professeur voit Appel et Suivi pour ses groupes seulement (règles de la base).
+const URL_APPLI = "https://fouad91150.github.io/boostetude-app/";
+const DOMAINE_PROF = "@prof.boostetude.fr";
+// Champ « Email » de la connexion : un identifiant sans @ est un compte professeur.
+const emailDeConnexion = saisie => {
+  const v = (saisie || "").trim().toLowerCase();
+  return v.includes("@") ? v : v + DOMAINE_PROF;
+};
+const identifiantProfPropose = (prenom, nom, profs) => {
+  const p = sansAccents(prenom).toLowerCase().replace(/[^a-z]/g, "").slice(0, 1) || "p";
+  const n = sansAccents(nom).toLowerCase().replace(/[^a-z0-9]/g, "") || "prof";
+  const base = `${p}.${n}`.slice(0, 38);
+  const pris = new Set((profs || []).map(x => (x.identifiant || (x.email || "").split("@")[0] || "").toLowerCase()));
+  if (!pris.has(base)) return base;
+  for (let i = 2; ; i++) if (!pris.has(base + i)) return base + i;
+};
+const messageAccesProf = (prenom, identifiant, mdp) =>
+  `Bonjour ${prenom},\n\n` +
+  `Bienvenue dans l'équipe Boost'Étude ! Voici ton accès à l'application, pour faire l'appel, noter le suivi de tes élèves et envoyer les bilans et devoirs aux parents :\n\n` +
+  `🔗 ${URL_APPLI}\n` +
+  `👤 Identifiant : *${identifiant}*\n` +
+  `🔑 Mot de passe : *${mdp}*\n\n` +
+  `Pense à faire l'appel à chaque séance : c'est lui qui compte tes heures.\n\n` +
+  `Boost'Étude`;
+
+function CarteComptesProfs({ profs, onChange }) {
+  const [form, setForm] = useState(null); // { prenom, nom, tel, taux }
+  const [occupe, setOccupe] = useState(false);
+  const [dernier, setDernier] = useState(null); // { prenom, identifiant, mdp, tel }
+  const [erreur, setErreur] = useState("");
+  const equipe = (profs || []).filter(p => p.role !== "admin");
+  const envoyerWA = (tel, texte) => window.open(`https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(texte)}`, "_blank");
+
+  const creer = async (prof) => {
+    setOccupe(true); setErreur("");
+    const f = prof ? { prenom: prof.prenom, nom: prof.nom, tel: prof.telephone, taux: prof.taux_horaire } : form;
+    const tel = (f.tel || "").trim();
+    const fenetre = tel ? window.open("", "_blank") : null;
+    try {
+      if (!prof && (!f.prenom.trim() || !f.nom.trim())) throw new Error("Indique le prénom et le nom.");
+      const identifiant = (prof && prof.identifiant) || identifiantProfPropose(f.prenom, f.nom, profs);
+      const mdp = motDePasseEleve();
+      const taux = f.taux === "" || f.taux == null ? null : Number(String(f.taux).replace(",", "."));
+      const { error } = await sb.rpc("creer_compte_prof", {
+        p_prof: prof ? prof.id : null, p_prenom: f.prenom, p_nom: f.nom, p_identifiant: identifiant,
+        p_mdp: mdp, p_telephone: tel, p_taux: Number.isFinite(taux) ? taux : null
+      });
+      if (error) throw new Error(error.message);
+      setDernier({ prenom: f.prenom, identifiant, mdp, tel });
+      if (fenetre) fenetre.location = `https://wa.me/${telWhatsApp(tel)}?text=${encodeURIComponent(messageAccesProf(f.prenom, identifiant, mdp))}`;
+      setForm(null);
+      onChange && onChange();
+    } catch (e) {
+      if (fenetre) fenetre.close();
+      setErreur(e.message || String(e));
+    } finally { setOccupe(false); }
+  };
+
+  const champ = (label, k, ph, type) => h(InputText, { label, value: form[k], onChange: v => setForm(s => ({ ...s, [k]: v })), placeholder: ph, type });
+  const petitBouton = (label, onClick, plein) => h("button", {
+    onClick, disabled: occupe,
+    style: { background: plein ? C.green : C.surface, color: plein ? "#fff" : C.texte, border: `1px solid ${plein ? C.green : C.bord}`,
+      borderRadius: 10, padding: "9px 12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }
+  }, label);
+
+  return h("div", { style: { background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 12, padding: 16, marginBottom: 16 } },
+    h("div", { style: { fontSize: 12, fontWeight: 700, color: C.gold, marginBottom: 10 } }, "👥 Comptes de l'équipe"),
+    equipe.length === 0 && h("div", { style: { fontSize: 13, color: C.gray, marginBottom: 10 } }, "Aucun professeur pour l'instant."),
+    equipe.map(p => h("div", { key: p.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${C.bord}` } },
+      h("div", { style: { flex: 1, minWidth: 0 } },
+        h("div", { style: { fontWeight: 700, fontSize: 14, color: C.texte } }, `${p.prenom || ""} ${p.nom || ""}`.trim() || "Professeur"),
+        h("div", { style: { fontSize: 12, color: C.gray } },
+          p.identifiant ? `Identifiant : ${p.identifiant}` : (p.email || "Pas encore de compte"))),
+      petitBouton("🔑 Nouveau mot de passe", () => {
+        if (window.confirm(`Donner un nouveau mot de passe à ${p.prenom || "ce professeur"} ? L'ancien ne marchera plus.`)) creer(p);
+      }))),
+    dernier && h("div", { style: { background: C.greenPale, border: `1px solid ${C.greenBord}`, borderRadius: 10, padding: 12, margin: "10px 0", fontSize: 13.5, color: C.texte } },
+      h("div", null, "✅ Accès de ", h("b", null, dernier.prenom), " : identifiant ", h("b", null, dernier.identifiant), " · mot de passe ", h("b", null, dernier.mdp)),
+      h("div", { style: { fontSize: 12, color: C.gray, marginTop: 4 } }, "Pense à lui confier ses groupes : Appel → modifier le groupe → « Professeur assigné »."),
+      dernier.tel && h("div", { style: { marginTop: 8 } }, petitBouton("📤 Renvoyer sur WhatsApp", () => envoyerWA(dernier.tel, messageAccesProf(dernier.prenom, dernier.identifiant, dernier.mdp)), true))),
+    form
+      ? h("div", { style: { marginTop: 12 } },
+          champ("Prénom", "prenom", "Khadija"),
+          champ("Nom", "nom", "Benali"),
+          champ("Téléphone (pour lui envoyer l'accès)", "tel", "06 12 34 56 78", "tel"),
+          champ("Taux horaire (€/h)", "taux", String(TAUX_HORAIRE_DEFAUT)),
+          form.prenom && form.nom && h("div", { style: { fontSize: 12.5, color: C.gray, marginBottom: 10 } },
+            "Identifiant : ", h("b", null, identifiantProfPropose(form.prenom, form.nom, profs))),
+          h("div", { style: { display: "flex", gap: 8 } },
+            petitBouton(occupe ? "Création…" : "✅ Créer le compte" + (form.tel ? " et l'envoyer sur WhatsApp" : ""), () => creer(null), true),
+            petitBouton("Annuler", () => setForm(null))))
+      : h("div", { style: { marginTop: 10 } }, petitBouton("➕ Ajouter un professeur", () => { setDernier(null); setForm({ prenom: "", nom: "", tel: "", taux: "" }); }, true)),
+    erreur && h("div", { style: { color: C.red, fontSize: 13, marginTop: 8 } }, erreur));
 }
 // ─── SUIVI DE SÉANCE ─────────────────────────────────────────
 // Un compte-rendu par élève et par séance : ce qui a été travaillé, ce qui a
@@ -7765,12 +8127,12 @@ function App() {
       const {
         error
       } = await sb.auth.signInWithPassword({
-        email,
+        email: emailDeConnexion(email),
         password
       });
       if (error) throw error;
     } catch (e) {
-      setAuthError(e.message === "Invalid login credentials" ? "Email ou mot de passe incorrect." : e.message);
+      setAuthError(e.message === "Invalid login credentials" ? "Identifiant ou mot de passe incorrect." : e.message);
     }
     setAuthLoading(false);
   };
@@ -8211,7 +8573,8 @@ function App() {
     onSaveParametres: handleSaveParametres,
     onExportComplet: handleExportComplet,
     onSaveTaux: handleSaveTaux,
-    onSaveTel: handleSaveTel
+    onSaveTel: handleSaveTel,
+    onReloadProfs: async () => setProfs(await api.fetchProfs())
   })), TABS.length > 1 && /*#__PURE__*/React.createElement("div", {
     // La barre du bas : blanche, posée sur un filet, avec des libellés lisibles.
     // Huit onglets tiennent sur un écran de téléphone à condition de resserrer
