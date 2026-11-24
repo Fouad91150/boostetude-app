@@ -47,14 +47,21 @@ function App() {
       setGroupes(gr);
       setAppels(ap);
       setFactures(fa);
+      // Les lectures secondaires partent ensemble : en 4G, les enchaîner
+      // une à une ajoutait autant d'allers-retours avant l'affichage.
+      const [cr, pa, en, st] = await Promise.all([
+        api.fetchComptesRendus(),
+        role === "admin" ? api.fetchParametres() : null,
+        role === "admin" ? api.fetchEncaissements().catch(() => []) : null,
+        role === "admin" ? api.fetchStages().catch(() => ({ stages: [], inscrits: [] })) : null
+      ]);
       if (role === "admin") {
-        setParametres(await api.fetchParametres());
-        setEncaissements(await api.fetchEncaissements().catch(() => []));
-        const st = await api.fetchStages().catch(() => ({ stages: [], inscrits: [] }));
+        setParametres(pa);
+        setEncaissements(en);
         setStages(st.stages);
         setInscrits(st.inscrits);
       }
-      setComptesRendus(await api.fetchComptesRendus());
+      setComptesRendus(cr);
     } catch (e) {
       setDataError(e.message || "Erreur de chargement des données");
     }
@@ -93,16 +100,21 @@ function App() {
           } catch (e) {/* non bloquant : l'appel suivant de l'administrateur rattrapera */}
         }
       }
-      setComptesRendus(await api.fetchComptesRendus());
-      if (role === "admin") {
-        setEncaissements(await api.fetchEncaissements().catch(() => []));
-        setParametres(await api.fetchParametres());
-        const st = await api.fetchStages().catch(() => ({ stages: [], inscrits: [] }));
+      const admin = role === "admin";
+      const [cr, en, pa, st, pf] = await Promise.all([
+        api.fetchComptesRendus(),
+        admin ? api.fetchEncaissements().catch(() => []) : null,
+        admin ? api.fetchParametres() : null,
+        admin ? api.fetchStages().catch(() => ({ stages: [], inscrits: [] })) : null,
+        admin ? api.fetchProfs().catch(() => null) : null /* non bloquant */
+      ]);
+      setComptesRendus(cr);
+      if (admin) {
+        setEncaissements(en);
+        setParametres(pa);
         setStages(st.stages);
         setInscrits(st.inscrits);
-        try {
-          setProfs(await api.fetchProfs());
-        } catch (e) {/* non bloquant */}
+        if (pf) setProfs(pf);
       }
     } catch (e) {
       setDataError(e.message || "Erreur de chargement des données");
