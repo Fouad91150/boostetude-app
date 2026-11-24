@@ -1,0 +1,8 @@
+# Hostinger (Apache) : la page et le service worker ne restent jamais en cache,
+# pour que chaque mise à jour soit vue dès la prochaine ouverture de l'appli.
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|eleve\.html|sw\.js|manifest\.json)$">
+    Header set Cache-Control "public, max-age=0, must-revalidate"
+  </FilesMatch>
+</IfModule>
+DirectoryIndex index.html
