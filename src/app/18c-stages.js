@@ -227,8 +227,13 @@ function ModuleStages({
     }
   };
 
+  // Une facture annulée ou supprimée ne retient plus l'élève dans le stage.
+  const factureActive = i => {
+    const f = i.factureId && (factures || []).find(x => x.id === i.factureId);
+    return !!f && f.statut !== "annulee";
+  };
   const desinscrire = async (inscription, el) => {
-    if (inscription.factureId) {
+    if (factureActive(inscription)) {
       signalerErreur({ message: "Cet élève est déjà facturé : annulez d'abord sa facture dans Factures." });
       return;
     }
@@ -350,7 +355,7 @@ function ModuleStages({
                     euros(i.tarif),
                     f && f.numero ? ` · ${f.numero}` : f ? " · brouillon" : " · pas encore facturé")),
                 f ? h(StatutBadge, { statut: f.statut }) : null,
-                !i.factureId
+                !factureActive(i)
                   ? h("button", {
                       onClick: () => desinscrire(i, el),
                       title: "Retirer du stage",

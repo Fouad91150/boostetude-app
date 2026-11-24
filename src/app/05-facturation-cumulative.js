@@ -34,12 +34,14 @@ const dernierePeriodeFin = (eid, factures) => {
 const dejaFacturees = (eid, factures) => {
   const cles = new Set();
   const anciennes = new Map(); // date → matières inscrites sans groupe
+  const offertes = new Set(); // matières dont la séance offerte est déjà sur une facture
   let avant = null;
   (factures || []).filter(f =>
     f.eleveId === eid && !f.stageId && f.statut !== "annulee" && (f.statut === "paye" || f.numero))
     .forEach(f => {
       const dates = f.datesSeances || [];
       if (dates.length) dates.forEach(d => {
+        if (d.offert) offertes.add(d.matiere || "");
         if (d.groupeId) cles.add(`${d.date}|g:${d.groupeId}`);
         else {
           cles.add(`${d.date}|${d.matiere || ""}`);
@@ -49,7 +51,7 @@ const dejaFacturees = (eid, factures) => {
       });
       else if (f.periodeFin && (!avant || f.periodeFin > avant)) avant = f.periodeFin;
     });
-  return { cles, anciennes, avant };
+  return { cles, anciennes, avant, offertes };
 };
 
 // Ce qu'il reste à régler sur une facture, une fois les versements déduits.
@@ -73,6 +75,7 @@ const premieresParMatiere = (eid, appels, groupes) => {
   return premiere;
 };
 const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
+  let premieres = null;
   const groupeDe = id => (groupes || []).find(g => g.id === id);
   const matieresActuelles = new Set((groupes || []).filter(g => (g.eids || []).includes(eid)).map(g => g.matiere || ""));
   const dejaVue = (date, g, gid) => {
@@ -98,7 +101,12 @@ const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
   }).sort((a, b) => a.date.localeCompare(b.date))
     .map((s, _, tout) => {
       if (!offert) return s;
-      const p = premieresParMatiere(eid, appels, groupes)[s.matiere];
+      // Une seule séance offerte par matière, pour toujours : si une facture
+      // en porte déjà une, un appel saisi en retard (plus ancien) ou une
+      // reprise après plus d'un an (hors de la fenêtre chargée) n'en offre pas
+      // une seconde.
+      if (depuis && depuis.offertes && depuis.offertes.has(s.matiere)) return s;
+      const p = (premieres || (premieres = premieresParMatiere(eid, appels, groupes)))[s.matiere];
       return p && p.date === s.date && p.gid === s.groupeId ? { ...s, offert: true } : s;
     });
 };
@@ -168,9 +176,17 @@ const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
     // Élève gratuit : rien à facturer ; un brouillon resté ouvert sans versement est retiré.
-    const dates = estGratuit(e) ? [] : seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
+    let dates = estGratuit(e) ? [] : seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
       .filter(d => !estFuture(d.date));
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
+    // Les séances d'un brouillon antérieures à la fenêtre chargée (douze mois)
+    // n'ont plus leur appel en mémoire : on les garde telles quelles au lieu
+    // de les effacer du brouillon sans les avoir jamais facturées.
+    if (brouillon && !estGratuit(e)) {
+      const borne = depuisUnAn();
+      const horsFenetre = (brouillon.datesSeances || []).filter(d => d.date < borne);
+      if (horsFenetre.length) dates = [...horsFenetre, ...dates];
+    }
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     const montant = montantSeances(dates, e.th);
     // Le brouillon est réaligné sur l'appel dès qu'il en diffère : séance ajoutée,

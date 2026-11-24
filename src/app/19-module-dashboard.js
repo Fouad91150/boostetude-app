@@ -144,10 +144,10 @@ function ModuleDashboard({
     c: C.texte
   }, {
     e: "💰",
-    v: `${caMois}€`,
+    v: montantTxt(caMois),
     l: "CA ce mois",
     c: C.green,
-    sub: `${caPaye}€ encaissé`
+    sub: `${montantTxt(caPaye)} encaissé`
   }, {
     e: "✅",
     v: `${taux}%`,
@@ -230,7 +230,7 @@ function ModuleDashboard({
         color: isL ? C.texte : C.gray,
         fontWeight: isL ? 700 : 400
       }
-    }, d.v > 0 ? `${d.v}€` : ""), /*#__PURE__*/React.createElement("div", {
+    }, d.v > 0 ? montantTxt(d.v) : ""), /*#__PURE__*/React.createElement("div", {
       // Une hauteur en pixels : le parent n'a pas de hauteur propre, et un
       // pourcentage s'y réduisait à rien — les barres ne s'affichaient pas.
       style: {

@@ -79,12 +79,22 @@ const splitNotions = txt => (txt || "").split(/[,;\n•]+/).map(s => s.trim()).f
 
 // Format international sans « + », exigé par les liens wa.me.
 // "06 12 34 56 78" → "33612345678".
+// Deux numéros dans le champ (« 06… / 07… ») : seul le premier sert.
+// « +33 (0)6… » : le zéro entre parenthèses est retiré.
 const telWhatsApp = tel => {
-  const t = (tel || "").replace(/[^\d+]/g, "");
-  if (t.startsWith("+")) return t.slice(1);
-  if (t.startsWith("00")) return t.slice(2);
-  if (t.startsWith("0")) return "33" + t.slice(1);
+  const premier = String(tel || "").split(/[\/,;]|\bou\b/)[0];
+  let t = premier.replace(/\(0\)/g, "").replace(/[^\d+]/g, "");
+  if (t.startsWith("+")) t = t.slice(1);
+  else if (t.startsWith("00")) t = t.slice(2);
+  else if (t.startsWith("0")) t = "33" + t.slice(1);
+  if (t.startsWith("330")) t = "33" + t.slice(3);
   return t;
+};
+
+// « Bonjour Mme Martin, » — ou « Bonjour, » quand le nom du parent manque.
+const salut = (e, mot = "Bonjour") => {
+  const nom = String((e && e.parent) || "").trim();
+  return nom ? `${mot} ${nom}` : mot;
 };
 
 // Montant d'un document comptable : toujours deux décimales, virgule française.

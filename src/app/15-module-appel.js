@@ -33,9 +33,16 @@ function ModuleAppel({
 
   // Le brouillon est écrit à chaque geste : si l'onglet se ferme ou si le réseau
   // tombe, la saisie est toujours là au retour.
+  // Une saisie identique à ce que porte le serveur n'est pas un brouillon :
+  // la garder ferait écraser plus tard la correction d'un collègue.
   useEffect(() => {
     if (grp && etape === "appel" && Object.keys(pres).length) {
-      Local.ecrire(cleBrouillonAppel(grp.id, date), pres);
+      const cle = cleBrouillonAppel(grp.id, date);
+      const serveur = etatServeur(grp, date);
+      const identique = Object.keys(pres).length === Object.keys(serveur).length &&
+        Object.keys(pres).every(id => pres[id] === serveur[id]);
+      if (identique && appelFait(grp.id, date)) Local.effacer(cle);
+      else Local.ecrire(cle, pres);
     }
   }, [pres, grp, date, etape]);
 
@@ -68,34 +75,50 @@ function ModuleAppel({
   }
   // Un appel laissé en plan vaut mieux qu'une liste repartie de zéro : le
   // brouillon local l'emporte sur ce qu'a renvoyé le serveur.
-  const etatPour = (g, d) => {
-    const brouillon = Local.lire(cleBrouillonAppel(g.id, d), null);
-    if (brouillon && Object.keys(brouillon).length) return { pres: brouillon, repris: !appels[`ap:${g.id}:${d}`] };
-    const ex = appels[`ap:${g.id}:${d}`];
-    if (ex) return { pres: ex, repris: false };
+  // Chaque élève du groupe part « présent », puis ce que porte le serveur
+  // l'emporte. Un cours sans aucune présence (créé par un compte rendu, ou un
+  // envoi interrompu) ne vaut donc pas un appel fait, et un élève arrivé
+  // dans le groupe après coup figure bien dans ce qui sera enregistré.
+  const etatServeur = (g, d) => {
     const p = {};
     (g.eids || []).forEach(id => {
       p[id] = "present";
     });
-    return { pres: p, repris: false };
+    return { ...p, ...(appels[`ap:${g.id}:${d}`] || {}) };
   };
+  const etatPour = (g, d) => {
+    const brouillon = Local.lire(cleBrouillonAppel(g.id, d), null);
+    const surServeur = appelFait(g.id, d);
+    if (brouillon && Object.keys(brouillon).length) return { pres: { ...etatServeur(g, d), ...brouillon }, repris: !surServeur };
+    return { pres: etatServeur(g, d), repris: false };
+  };
+  const appelFait = (gid, d) => Object.keys(appels[`ap:${gid}:${d}`] || {}).length > 0;
   const ouvrir = g => {
     if (estFuture(date)) {
       signalerErreur(`Le ${fmtDateLongue(date)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
       return;
     }
     setGrp(g);
+    setOnglet("appel");
     const { pres: p, repris } = etatPour(g, date);
     setPres(p);
     if (repris) signalerInfo("Appel repris là où vous l'aviez laissé.");
     setEtape("appel");
   };
   const changerDate = d => {
+    if (estFuture(d)) {
+      signalerErreur(`Le ${fmtDateLongue(d)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
+      return;
+    }
     setDate(d);
     if (!grp) return;
     setPres(etatPour(grp, d).pres);
   };
   const enregistrer = async () => {
+    if (estFuture(date)) {
+      signalerErreur(`Le ${fmtDateLongue(date)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
+      return;
+    }
     setEnregistrement(true);
     try {
       const { enAttente: differe } = await envoyerAppel(onSaveAppel, grp.id, date, pres);
@@ -212,7 +235,7 @@ function ModuleAppel({
       gap: 10
     }
   }, groupesTenus.map(g => {
-    const fait = !!appels[`ap:${g.id}:${date}`];
+    const fait = appelFait(g.id, date);
     return /*#__PURE__*/React.createElement("div", {
       key: g.id,
       style: {
@@ -567,13 +590,14 @@ function ModuleAppel({
   }, "📅"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: date,
+    max: todayStr(),
     onChange: e => changerDate(e.target.value),
     style: {
       flex: 1,
       background: "transparent",
       border: "none",
       color: C.texte,
-      fontSize: 14,
+      fontSize: 16,
       fontFamily: "inherit",
       outline: "none",
       colorScheme: "light"

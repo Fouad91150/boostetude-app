@@ -14,6 +14,11 @@ function App() {
   const [stages, setStages] = useState([]);
   const [inscrits, setInscrits] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
+  // Vrai dès que les données sont arrivées une fois. Les rechargements suivants
+  // (après un appel, un élève créé…) ne remplacent plus l'écran par le
+  // chargement : cela démontait le module ouvert et perdait l'écran du compte
+  // rendu, ou le mot de passe tout juste créé d'un élève.
+  const [dejaCharge, setDejaCharge] = useState(false);
   const [dataError, setDataError] = useState("");
   const [tab, setTab] = useState("dashboard");
   const [monRole, setMonRole] = useState(null);
@@ -63,9 +68,11 @@ function App() {
       }
       setComptesRendus(cr);
     } catch (e) {
-      setDataError(e.message || "Erreur de chargement des données");
+      if (dejaCharge) signalerErreur("Actualisation impossible : " + (e.message || "erreur de chargement"));
+      else setDataError(e.message || "Erreur de chargement des données");
     }
     setLoadingData(false);
+    setDejaCharge(true);
   };
   const chargerProfilEtDonnees = async () => {
     setLoadingData(true);
@@ -117,9 +124,11 @@ function App() {
         if (pf) setProfs(pf);
       }
     } catch (e) {
-      setDataError(e.message || "Erreur de chargement des données");
+      if (dejaCharge) signalerErreur("Actualisation impossible : " + (e.message || "erreur de chargement"));
+      else setDataError(e.message || "Erreur de chargement des données");
     }
     setLoadingData(false);
+    setDejaCharge(true);
   };
   useEffect(() => {
     if (session) chargerProfilEtDonnees();
@@ -145,6 +154,7 @@ function App() {
   };
   const doLogout = async () => {
     await sb.auth.signOut();
+    setDejaCharge(false);
     setTab("dashboard");
   };
   const handleCreateEleve = async form => {
@@ -293,7 +303,7 @@ function App() {
     error: authError,
     loading: authLoading
   });
-  if (loadingData) return /*#__PURE__*/React.createElement(LoadingScreen, {
+  if (loadingData && !dejaCharge) return /*#__PURE__*/React.createElement(LoadingScreen, {
     msg: "Synchronisation des données…"
   });
   if (dataError) return /*#__PURE__*/React.createElement("div", {

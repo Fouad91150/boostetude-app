@@ -203,3 +203,40 @@ est désormais publiée par **GitHub Pages** : `npm run build` écrit `dist/` **
 `main` à l'adresse https://fouad91150.github.io/boostetude-app/.
 Les chemins (manifest, service worker) sont relatifs : la même page tourne à la
 racine d'un domaine comme sous `/boostetude-app/`.
+
+## 3.12.0 — passe de fiabilité (24 novembre 2026)
+
+Audit de l'appel, du suivi et de la facturation ; chaque correction a son test
+(`tests/fiabilite-3-12.test.js`).
+
+**Appel et suivi**
+- L'écran « Qu'avez-vous travaillé ? » réapparaît après l'appel : chaque
+  rechargement remplaçait toute l'application par l'écran de chargement, ce qui
+  renvoyait à la liste des groupes. Même cause, même correction pour le mot de
+  passe d'un compte élève qui disparaissait juste après sa création.
+- Un cours sans présence (créé par un compte rendu) n'est plus affiché « ✓ Fait » ;
+  un élève ajouté au groupe après coup figure dans l'appel enregistré.
+- Plus d'appel daté dans le futur, même en changeant la date dans l'appel.
+- Un brouillon local identique au serveur est effacé : il ne peut plus écraser la
+  correction d'un collègue.
+- Suivi : le texte « tout le groupe » tapé sans appuyer sur « Appliquer » est enregistré.
+- Champs en 16 px (plus de zoom forcé sur iPhone), onglet remis sur « Appel » à
+  chaque groupe ouvert.
+
+**Facturation**
+- Une seule séance offerte par matière, même après un appel saisi en retard ou une
+  reprise après plus d'un an.
+- Un brouillon de plus de douze mois ne perd plus ses anciennes séances.
+- Enregistrer une note ne rouvre plus une facture soldée entre-temps.
+- Supprimer un brouillon n'efface plus la présence d'une autre matière le même jour.
+- Une lecture ratée des réglages n'applique plus le plein tarif aux élèves remisés.
+- Ligne « N séances × durée × tarif » juste pour le primaire et les séances offertes.
+- Un élève se retire d'un stage dont la facture a été annulée.
+
+**Parents et confort**
+- Numéros WhatsApp : « +33 (0)6… » et « 06… / 07… » donnent le bon numéro.
+- « Bonjour, » au lieu de « Bonjour , » quand le nom du parent manque.
+- Fiche élève : le numéro du parent s'appelle d'un toucher, bouton WhatsApp, e-mail cliquable.
+- Liste des élèves : la tuile « Désactivés » affiche les élèves désactivés.
+- Accueil : montants à la française (74,50 €).
+- Chargement initial : les lectures secondaires partent en parallèle.

@@ -30,7 +30,10 @@ const api = {
     // La remise d'engagement multiple s'applique avant tout calcul de montant,
     // pour que la facture, le PDF et les messages disent tous la même chose.
     if (isAdmin) {
-      const { data: reg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
+      // Une lecture ratée n'est pas « pas de remise » : sans ce garde-fou, le
+      // rattrapage des brouillons réécrivait tous les montants remisés au plein tarif.
+      const { data: reg, error: eReg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
+      if (eReg) throw eReg;
       elList = appliquerRemiseMulti(elList, grList, reg && reg.remise_multi);
     }
     elList = appliquerPart(elList);
@@ -341,11 +344,23 @@ const api = {
       } = await sb.from("paiements").delete().eq("id", factureId);
       if (error) throw error;
     }
-    const jours = [...new Set((dates || []).map(d => d.date || d))];
-    if (jours.length) {
+    // On vise le cours exact (groupe + date) : le même jour, une autre matière
+    // déjà facturée ailleurs garde sa présence.
+    const liste = (dates || []).map(d => typeof d === "string" ? { date: d } : d);
+    const precises = liste.filter(d => d.groupeId);
+    const vagues = [...new Set(liste.filter(d => !d.groupeId).map(d => d.date))];
+    for (const d of precises) {
+      const { data: cours, error: ec } = await sb.from("cours").select("id").eq("groupe_id", d.groupeId).eq("date", d.date);
+      if (ec) throw ec;
+      const ids = (cours || []).map(c => c.id);
+      if (!ids.length) continue;
+      const { error } = await sb.from("presences").delete().eq("eleve_id", eleveId).eq("statut", "present").in("cours_id", ids);
+      if (error) throw error;
+    }
+    if (vagues.length) {
       const {
         error
-      } = await sb.from("presences").delete().eq("eleve_id", eleveId).eq("statut", "present").in("date", jours);
+      } = await sb.from("presences").delete().eq("eleve_id", eleveId).eq("statut", "present").in("date", vagues);
       if (error) throw error;
     }
   }

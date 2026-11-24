@@ -30,7 +30,7 @@ function MiniArea({ label, value, onChange, placeholder, rows }) {
       rows: rows || 2,
       style: {
         width: "100%", background: C.surface, border: `1px solid ${C.bord}`,
-        borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 14, fontFamily: "inherit",
+        borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 16, fontFamily: "inherit",
         outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5
       }
     })
@@ -208,24 +208,33 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
     comptesRendus.filter(c => c.groupe_id === grp.id).flatMap(c => splitNotions(c.notions))
   )].slice(0, 8);
 
-  const appliquerATous = () => {
+  // Ajoute le tronc commun aux notions de chaque élève présent.
+  const avecCommun = base => {
     const t = commun.trim();
-    if (!t) return;
-    const next = { ...brouillon };
+    if (!t) return base;
+    const next = { ...base };
     listeIds.forEach(id => {
       const v = next[id] || {};
       const deja = splitNotions(v.notions).some(x => x.toLowerCase() === t.toLowerCase());
       next[id] = { ...v, notions: deja ? v.notions : ((v.notions || "").trim() ? `${v.notions.trim()}, ${t}` : t) };
     });
-    setBrouillon(next);
+    return next;
+  };
+  const appliquerATous = () => {
+    if (!commun.trim()) return;
+    setBrouillon(avecCommun(brouillon));
     setCommun("");
   };
 
+  // Un tronc commun tapé mais pas encore « appliqué » est enregistré quand même :
+  // on ne perd pas ce qui a été écrit pour un bouton oublié.
   const enregistrer = async () => {
     setSaving(true);
     try {
+      const source = avecCommun(brouillon);
+      if (commun.trim()) { setBrouillon(source); setCommun(""); }
       const complet = {};
-      listeIds.forEach(id => { complet[id] = brouillon[id] || {}; });
+      listeIds.forEach(id => { complet[id] = source[id] || {}; });
       await onSave(grp.id, date, complet, monProfilId);
       setEtape("confirme");
     } catch (e) {
@@ -250,7 +259,7 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
       h("span", { style: { fontSize: 13, color: C.gray } }, "📅"),
       h("input", {
         type: "date", value: date, onChange: e => changerDate(e.target.value),
-        style: { flex: 1, background: "transparent", border: "none", color: C.texte, fontSize: 14, fontFamily: "inherit", outline: "none", colorScheme: "light" }
+        style: { flex: 1, background: "transparent", border: "none", color: C.texte, fontSize: 16, fontFamily: "inherit", outline: "none", colorScheme: "light" }
       }),
       h("span", { style: { fontSize: 11, fontWeight: 700, color: nbRemplis ? C.gold : C.gray } }, `${nbRemplis}/${listeIds.length}`)
     ),
@@ -266,9 +275,9 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
         onChange: e => setCommun(e.target.value),
         placeholder: "Théorème de Thalès, exercices d'application…",
         rows: 2,
-        style: { width: "100%", background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", resize: "vertical", marginBottom: 8, lineHeight: 1.5 }
+        style: { width: "100%", background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 16, fontFamily: "inherit", outline: "none", boxSizing: "border-box", resize: "vertical", marginBottom: 8, lineHeight: 1.5 }
       }),
-      h(BtnPrimary, { label: `↓ Appliquer aux ${listeIds.length} élèves`, onClick: appliquerATous, disabled: !commun.trim(), full: true })
+      h(BtnPrimary, { label: listeIds.length === 1 ? "↓ Appliquer à l'élève" : `↓ Appliquer aux ${listeIds.length} élèves`, onClick: appliquerATous, disabled: !commun.trim(), full: true })
     ),
 
     listeIds.length === 0

@@ -31,8 +31,12 @@ function ModuleFacturation({
   const eleveDe = eid => eleves.find(x => x.id === eid);
   // Ne reste à enregistrer que la note : le montant vient de l'appel, et le statut
   // se déduit des versements.
+  // On repart de la facture telle que la base la connaît maintenant, pas de la
+  // copie prise à l'ouverture de la fenêtre : un versement enregistré entre-temps
+  // a pu la solder, et réécrire l'ancien statut la rouvrirait.
   const handleSave = async data => {
-    await onSaveFacture(modal.f?.id || null, modal.e.id, { ...modal.f, ...data });
+    const actuelle = (modal.f?.id && factures.find(f => f.id === modal.f.id)) || modal.f;
+    await onSaveFacture(actuelle?.id || null, modal.e.id, { ...actuelle, ...data });
   };
   const encaissementsDe = fid => (encaissements || []).filter(e => e.factureId === fid);
   // Renvoie true si la suppression a bien eu lieu (permet d'attendre la confirmation
@@ -423,7 +427,8 @@ function ModuleFacturation({
         fontSize: 13,
         color: C.gray
       }
-    }, nb, " séance", nb > 1 ? "s" : "", " × 2h × ", e.th, "€ ", /*#__PURE__*/React.createElement("span", {
+    }, nb, " séance", nb > 1 ? "s" : "", " × ", dureeSeancesTxt(dates), " × ", montantTxt(e.th), "/h",
+      dates.some(d => d.offert) ? ` (dont ${dates.filter(d => d.offert).length} offerte${dates.filter(d => d.offert).length > 1 ? "s" : ""})` : "", " ", /*#__PURE__*/React.createElement("span", {
       style: {
         fontStyle: "italic"
       }

@@ -25,7 +25,7 @@ const motDePasseEleve = (alea = Math.random) => {
   return `${m}-${String(Math.floor(alea() * 9000) + 1000)}`;
 };
 const messageAccesEleve = (e, identifiant, mdp) =>
-  `Bonjour ${e.parent},\n\n` +
+  `${salut(e)},\n\n` +
   `Voici l'accès de ${e.prenom} à son *espace élève Boost'Étude*, pour revoir ses cours de mathématiques quand il le souhaite :\n\n` +
   `🔗 ${URL_ESPACE_ELEVE}\n` +
   `👤 Identifiant : *${identifiant}*\n` +

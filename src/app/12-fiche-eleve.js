@@ -57,7 +57,13 @@ function FicheEleve({
       ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
-    rows: [["Nom", eleve.parent || "—"], ["Tél", eleve.tel || "—"], ["Email", eleve.email || "—"]]
+    // Le numéro et l'adresse se touchent : appel, WhatsApp ou mail sans
+    // passer par une feuille d'appel.
+    rows: [["Nom", eleve.parent || "—"],
+      ["Tél", eleve.tel ? React.createElement("span", { style: { display: "inline-flex", gap: 12, alignItems: "center" } },
+        React.createElement("a", { href: `tel:${String(eleve.tel).replace(/[^\d+]/g, "")}`, style: { color: C.navy, fontWeight: 700 } }, eleve.tel),
+        React.createElement("a", { href: `https://wa.me/${telWhatsApp(eleve.tel)}`, target: "_blank", rel: "noopener", style: { color: C.green, fontWeight: 700, textDecoration: "none" } }, "WhatsApp")) : "—"],
+      ["Email", eleve.email ? React.createElement("a", { href: `mailto:${eleve.email}`, style: { color: C.navy } }, eleve.email) : "—"]]
   }, eleve.notes ? {
     t: "📝 Notes",
     rows: [["", eleve.notes]]

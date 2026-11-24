@@ -25,7 +25,7 @@ const makeBilanWhatsApp = (e, d) => {
   L.push("*Boost'Étude — Bilan de la semaine*");
   L.push(`_${d.periode}_`);
   L.push("");
-  L.push(`Bonjour ${e.parent},`);
+  L.push(`${salut(e)},`);
   L.push("");
   L.push(`Voici le point sur ${e.prenom} cette semaine.`);
   L.push("");
@@ -55,7 +55,7 @@ const makeBilanSMS = (e, d) => {
 const makeBilanEmail = (e, d) => ({
   sujet: `Bilan de la semaine — ${e.prenom} ${e.nom} — Boost'Étude`,
   corps: [
-    `Bonjour ${e.parent},`,
+    `${salut(e)},`,
     "",
     `Voici le bilan de ${e.prenom} pour la semaine du ${d.periode}.`,
     "",

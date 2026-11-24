@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script>window.__APP_VERSION = "3.11.0";
+<script>window.__APP_VERSION = "3.12.0";
 window.__APP_BUILD = "2026-11-24";
 // ─── SUPABASE ────────────────────────────────────────────────
 const SUPABASE_URL = "https://jcvvpzcczbewduiexuri.supabase.co";
@@ -332,7 +332,10 @@ const api = {
     // La remise d'engagement multiple s'applique avant tout calcul de montant,
     // pour que la facture, le PDF et les messages disent tous la même chose.
     if (isAdmin) {
-      const { data: reg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
+      // Une lecture ratée n'est pas « pas de remise » : sans ce garde-fou, le
+      // rattrapage des brouillons réécrivait tous les montants remisés au plein tarif.
+      const { data: reg, error: eReg } = await sb.from("parametres_entreprise").select("remise_multi").maybeSingle();
+      if (eReg) throw eReg;
       elList = appliquerRemiseMulti(elList, grList, reg && reg.remise_multi);
     }
     elList = appliquerPart(elList);
@@ -643,11 +646,23 @@ const api = {
       } = await sb.from("paiements").delete().eq("id", factureId);
       if (error) throw error;
     }
-    const jours = [...new Set((dates || []).map(d => d.date || d))];
-    if (jours.length) {
+    // On vise le cours exact (groupe + date) : le même jour, une autre matière
+    // déjà facturée ailleurs garde sa présence.
+    const liste = (dates || []).map(d => typeof d === "string" ? { date: d } : d);
+    const precises = liste.filter(d => d.groupeId);
+    const vagues = [...new Set(liste.filter(d => !d.groupeId).map(d => d.date))];
+    for (const d of precises) {
+      const { data: cours, error: ec } = await sb.from("cours").select("id").eq("groupe_id", d.groupeId).eq("date", d.date);
+      if (ec) throw ec;
+      const ids = (cours || []).map(c => c.id);
+      if (!ids.length) continue;
+      const { error } = await sb.from("presences").delete().eq("eleve_id", eleveId).eq("statut", "present").in("cours_id", ids);
+      if (error) throw error;
+    }
+    if (vagues.length) {
       const {
         error
-      } = await sb.from("presences").delete().eq("eleve_id", eleveId).eq("statut", "present").in("date", jours);
+      } = await sb.from("presences").delete().eq("eleve_id", eleveId).eq("statut", "present").in("date", vagues);
       if (error) throw error;
     }
   }
@@ -1007,12 +1022,22 @@ const splitNotions = txt => (txt || "").split(/[,;\n•]+/).map(s => s.trim()).f
 
 // Format international sans « + », exigé par les liens wa.me.
 // "06 12 34 56 78" → "33612345678".
+// Deux numéros dans le champ (« 06… / 07… ») : seul le premier sert.
+// « +33 (0)6… » : le zéro entre parenthèses est retiré.
 const telWhatsApp = tel => {
-  const t = (tel || "").replace(/[^\d+]/g, "");
-  if (t.startsWith("+")) return t.slice(1);
-  if (t.startsWith("00")) return t.slice(2);
-  if (t.startsWith("0")) return "33" + t.slice(1);
+  const premier = String(tel || "").split(/[\/,;]|\bou\b/)[0];
+  let t = premier.replace(/\(0\)/g, "").replace(/[^\d+]/g, "");
+  if (t.startsWith("+")) t = t.slice(1);
+  else if (t.startsWith("00")) t = t.slice(2);
+  else if (t.startsWith("0")) t = "33" + t.slice(1);
+  if (t.startsWith("330")) t = "33" + t.slice(3);
   return t;
+};
+
+// « Bonjour Mme Martin, » — ou « Bonjour, » quand le nom du parent manque.
+const salut = (e, mot = "Bonjour") => {
+  const nom = String((e && e.parent) || "").trim();
+  return nom ? `${mot} ${nom}` : mot;
 };
 
 // Montant d'un document comptable : toujours deux décimales, virgule française.
@@ -1183,12 +1208,14 @@ const dernierePeriodeFin = (eid, factures) => {
 const dejaFacturees = (eid, factures) => {
   const cles = new Set();
   const anciennes = new Map(); // date → matières inscrites sans groupe
+  const offertes = new Set(); // matières dont la séance offerte est déjà sur une facture
   let avant = null;
   (factures || []).filter(f =>
     f.eleveId === eid && !f.stageId && f.statut !== "annulee" && (f.statut === "paye" || f.numero))
     .forEach(f => {
       const dates = f.datesSeances || [];
       if (dates.length) dates.forEach(d => {
+        if (d.offert) offertes.add(d.matiere || "");
         if (d.groupeId) cles.add(`${d.date}|g:${d.groupeId}`);
         else {
           cles.add(`${d.date}|${d.matiere || ""}`);
@@ -1198,7 +1225,7 @@ const dejaFacturees = (eid, factures) => {
       });
       else if (f.periodeFin && (!avant || f.periodeFin > avant)) avant = f.periodeFin;
     });
-  return { cles, anciennes, avant };
+  return { cles, anciennes, avant, offertes };
 };
 
 // Ce qu'il reste à régler sur une facture, une fois les versements déduits.
@@ -1222,6 +1249,7 @@ const premieresParMatiere = (eid, appels, groupes) => {
   return premiere;
 };
 const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
+  let premieres = null;
   const groupeDe = id => (groupes || []).find(g => g.id === id);
   const matieresActuelles = new Set((groupes || []).filter(g => (g.eids || []).includes(eid)).map(g => g.matiere || ""));
   const dejaVue = (date, g, gid) => {
@@ -1247,7 +1275,12 @@ const seancesOuvertes = (eid, appels, groupes, depuis, offert = false) => {
   }).sort((a, b) => a.date.localeCompare(b.date))
     .map((s, _, tout) => {
       if (!offert) return s;
-      const p = premieresParMatiere(eid, appels, groupes)[s.matiere];
+      // Une seule séance offerte par matière, pour toujours : si une facture
+      // en porte déjà une, un appel saisi en retard (plus ancien) ou une
+      // reprise après plus d'un an (hors de la fenêtre chargée) n'en offre pas
+      // une seconde.
+      if (depuis && depuis.offertes && depuis.offertes.has(s.matiere)) return s;
+      const p = (premieres || (premieres = premieresParMatiere(eid, appels, groupes)))[s.matiere];
       return p && p.date === s.date && p.gid === s.groupeId ? { ...s, offert: true } : s;
     });
 };
@@ -1317,9 +1350,17 @@ const brouillonsEnRetard = (eleves, groupes, appels, factures) => (eleves || [])
   .filter(e => e.actif !== false)
   .map(e => {
     // Élève gratuit : rien à facturer ; un brouillon resté ouvert sans versement est retiré.
-    const dates = estGratuit(e) ? [] : seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
+    let dates = estGratuit(e) ? [] : seancesOuvertes(e.id, appels || {}, groupes || [], dejaFacturees(e.id, factures), e.premierCoursOffert)
       .filter(d => !estFuture(d.date));
     const brouillon = (factures || []).find(f => f.eleveId === e.id && !f.numero && !f.stageId && f.statut !== "paye" && f.statut !== "annulee");
+    // Les séances d'un brouillon antérieures à la fenêtre chargée (douze mois)
+    // n'ont plus leur appel en mémoire : on les garde telles quelles au lieu
+    // de les effacer du brouillon sans les avoir jamais facturées.
+    if (brouillon && !estGratuit(e)) {
+      const borne = depuisUnAn();
+      const horsFenetre = (brouillon.datesSeances || []).filter(d => d.date < borne);
+      if (horsFenetre.length) dates = [...horsFenetre, ...dates];
+    }
     const actuel = brouillon ? (brouillon.nbSeances || 0) : 0;
     const montant = montantSeances(dates, e.th);
     // Le brouillon est réaligné sur l'appel dès qu'il en diffère : séance ajoutée,
@@ -1373,7 +1414,7 @@ const signatureBoost = "Boost'Étude";
 // libellé et un prix. `prestation`, quand elle est là, remplace le décompte.
 const makeFactureEmail = (e, mois, nb, total, dates, seuil, prestation) => ({
   sujet: `Facture ${mois} — ${e.prenom} ${e.nom} — Boost'Étude`,
-  corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
+  corps: `${salut(e)},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
          (prestation ? `${prestation}\n` : `Séances : ${nb} × ${dureeSeancesTxt(dates)} × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
          `TOTAL : ${montantTxt(total)}\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
@@ -1400,7 +1441,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
   // Titre sans gras sur toute la ligne : WhatsApp affichait un « * » orphelin
   // (capture du 13/10). Le gras ne porte que sur le numéro.
   return `🧾 *Facture ${mois}* — Boost'Étude\n\n` +
-         `Bonjour ${e.parent},\n\n` +
+         `${salut(e)},\n\n` +
          `Voici la facture de ${e.prenom} :\n` +
          lignes +
          (prestation
@@ -1418,7 +1459,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
 };
 const makeRappelEmail = (e, mois, total, dates) => ({
   sujet: `Rappel règlement ${mois} — ${e.prenom} ${e.nom}`,
-  corps: `Bonjour ${e.parent},\n\nRappel : le règlement de ${montantTxt(total)} pour ${e.prenom} (${mois}) est en attente.${detailMatieresTxt(dates)}\n\n` +
+  corps: `${salut(e)},\n\nRappel : le règlement de ${montantTxt(total)} pour ${e.prenom} (${mois}) est en attente.${detailMatieresTxt(dates)}\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\nMerci,\n${signatureBoost}`
 });
 const makeRappelSMS = (e, mois, total) =>
@@ -1427,9 +1468,9 @@ const makeRappelSMS = (e, mois, total) =>
   `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}). Merci !`;
 const makeAbsenceEmail = (e, dateLabel, justifie) => ({
   sujet: `Absence de ${e.prenom} ${e.nom} — ${dateLabel} — Boost'Étude`,
-  corps: justifie ? `Bonjour ${e.parent},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude\nboostetude@gmail.com` : `Bonjour ${e.parent},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude\nboostetude@gmail.com`
+  corps: justifie ? `${salut(e)},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude\nboostetude@gmail.com` : `${salut(e)},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude\nboostetude@gmail.com`
 });
-const makeAbsenceSMS = (e, dateLabel, justifie) => justifie ? `Boost'Étude : bonjour ${e.parent}, nous confirmons l'absence justifiée de ${e.prenom} le ${dateLabel}. Merci !` : `Boost'Étude : bonjour ${e.parent}, ${e.prenom} était absent(e) le ${dateLabel}. Merci de nous contacter si besoin.`;
+const makeAbsenceSMS = (e, dateLabel, justifie) => justifie ? `Boost'Étude : ${salut(e, "bonjour")}, nous confirmons l'absence justifiée de ${e.prenom} le ${dateLabel}. Merci !` : `Boost'Étude : ${salut(e, "bonjour")}, ${e.prenom} était absent(e) le ${dateLabel}. Merci de nous contacter si besoin.`;
 const {
   useState,
   useEffect
@@ -1443,7 +1484,7 @@ const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse, liens, p) => 
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
     : "";
   return (reference ? `🔔 *Rappel facture ${reference}* — Boost'Étude` : `🔔 Rappel — Boost'Étude`) + "\n\n" +
-         `Bonjour ${e.parent},\n\n` +
+         `${salut(e)},\n\n` +
          `Un petit rappel au sujet de la facture de ${e.prenom} :\n` +
          lignes +
          ((dejaVerse || 0) > 0 ? `• Déjà versé : ${montantTxt(dejaVerse)}\n` : "") +
@@ -2245,7 +2286,7 @@ const listeDatesAbsences = (dates, puce) => dates.map(d => `${puce} ${fmtDateLon
 
 const makeAlerteAbsencesEmail = (e, dates) => ({
   sujet: `Absences répétées de ${e.prenom} ${e.nom} — Boost'Étude`,
-  corps: `Bonjour ${e.parent || ""},\n\n`.replace(" ,", ",") +
+  corps: `${salut(e)},\n\n` +
          `${e.prenom} a manqué ${dates.length} séances sans justificatif depuis la rentrée :\n` +
          `${listeDatesAbsences(dates, "-")}\n\n` +
          `En petit groupe, la régularité fait l'essentiel des progrès, et chaque séance manquée se rattrape difficilement. ` +
@@ -2259,7 +2300,7 @@ const makeAlerteAbsencesSMS = (e, dates) =>
 
 const makeAlerteAbsencesWhatsApp = (e, dates) =>
   `*Boost'Étude — Absences de ${e.prenom}*\n\n` +
-  `Bonjour ${e.parent || ""},\n\n`.replace(" ,", ",") +
+  `${salut(e)},\n\n` +
   `${e.prenom} a manqué *${dates.length} séances sans justificatif* depuis la rentrée :\n` +
   `${listeDatesAbsences(dates, "•")}\n\n` +
   `La régularité fait l'essentiel des progrès en petit groupe. Pourriez-vous nous dire ce qui empêche ${e.prenom} de venir ? ` +
@@ -2735,7 +2776,7 @@ const motDePasseEleve = (alea = Math.random) => {
   return `${m}-${String(Math.floor(alea() * 9000) + 1000)}`;
 };
 const messageAccesEleve = (e, identifiant, mdp) =>
-  `Bonjour ${e.parent},\n\n` +
+  `${salut(e)},\n\n` +
   `Voici l'accès de ${e.prenom} à son *espace élève Boost'Étude*, pour revoir ses cours de mathématiques quand il le souhaite :\n\n` +
   `🔗 ${URL_ESPACE_ELEVE}\n` +
   `👤 Identifiant : *${identifiant}*\n` +
@@ -2849,7 +2890,13 @@ function FicheEleve({
       ["Mode de règlement", eleve.mp]]
   }, {
     t: "👨‍👩‍👦 Parent",
-    rows: [["Nom", eleve.parent || "—"], ["Tél", eleve.tel || "—"], ["Email", eleve.email || "—"]]
+    // Le numéro et l'adresse se touchent : appel, WhatsApp ou mail sans
+    // passer par une feuille d'appel.
+    rows: [["Nom", eleve.parent || "—"],
+      ["Tél", eleve.tel ? React.createElement("span", { style: { display: "inline-flex", gap: 12, alignItems: "center" } },
+        React.createElement("a", { href: `tel:${String(eleve.tel).replace(/[^\d+]/g, "")}`, style: { color: C.navy, fontWeight: 700 } }, eleve.tel),
+        React.createElement("a", { href: `https://wa.me/${telWhatsApp(eleve.tel)}`, target: "_blank", rel: "noopener", style: { color: C.green, fontWeight: 700, textDecoration: "none" } }, "WhatsApp")) : "—"],
+      ["Email", eleve.email ? React.createElement("a", { href: `mailto:${eleve.email}`, style: { color: C.navy } }, eleve.email) : "—"]]
   }, eleve.notes ? {
     t: "📝 Notes",
     rows: [["", eleve.notes]]
@@ -2929,7 +2976,11 @@ function ModuleEleves({
     setTimeout(() => setToast(null), 2500);
   };
   const actifs = eleves.filter(e => e.actif !== false);
-  const filtered = actifs.filter(e => !search || `${e.prenom} ${e.nom} ${e.niveau}`.toLowerCase().includes(search.toLowerCase()));
+  // Les élèves désactivés restent consultables (et réactivables depuis leur fiche).
+  const inactifs = eleves.filter(e => e.actif === false);
+  const [voirInactifs, setVoirInactifs] = useState(false);
+  const source = voirInactifs ? inactifs : actifs;
+  const filtered = source.filter(e => !search || `${e.prenom} ${e.nom} ${e.niveau}`.toLowerCase().includes(search.toLowerCase()));
   // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : on liste tous les
   // groupes où il apparaît (eleves_groupes, reflété dans groupes[].eids), pas un seul.
   const matieresDe = eid => {
@@ -3016,13 +3067,20 @@ function ModuleEleves({
     l: "Actifs",
     c: C.texte
   }, {
-    e: "📋",
-    v: eleves.length,
-    l: "Total",
-    c: C.texte
-  }].map((s, i) => /*#__PURE__*/React.createElement("div", {
+    e: "💤",
+    v: inactifs.length,
+    l: voirInactifs ? "Désactivés (affichés)" : "Désactivés",
+    c: C.texte,
+    clic: inactifs.length > 0 ? () => setVoirInactifs(!voirInactifs) : null
+  }].map((s, i) => /*#__PURE__*/React.createElement(s.clic ? "button" : "div", {
     key: i,
+    onClick: s.clic || undefined,
+    "aria-pressed": s.clic ? voirInactifs : undefined,
     style: {
+      fontFamily: "inherit",
+      cursor: s.clic ? "pointer" : "default",
+      width: "100%",
+      ...(i === 1 && voirInactifs ? { outline: `2px solid ${C.gold}` } : {}),
       background: C.surface,
       border: `1px solid ${C.bord}`,
       borderRadius: 12,
@@ -3154,7 +3212,7 @@ function ModuleEleves({
       marginBottom: 12,
       fontSize: 13
     }
-  }, "Aucun élève pour l'instant — les inscriptions démarrent à la rentrée."), /*#__PURE__*/React.createElement(BtnPrimary, {
+  }, search ? `Aucun élève ne correspond à « ${search} ».` : voirInactifs ? "Aucun élève désactivé." : "Aucun élève pour l'instant — les inscriptions démarrent à la rentrée."), !search && !voirInactifs && /*#__PURE__*/React.createElement(BtnPrimary, {
     label: "+ Ajouter un élève",
     onClick: () => {
       setSel(null);
@@ -3289,9 +3347,16 @@ function ModuleAppel({
 
   // Le brouillon est écrit à chaque geste : si l'onglet se ferme ou si le réseau
   // tombe, la saisie est toujours là au retour.
+  // Une saisie identique à ce que porte le serveur n'est pas un brouillon :
+  // la garder ferait écraser plus tard la correction d'un collègue.
   useEffect(() => {
     if (grp && etape === "appel" && Object.keys(pres).length) {
-      Local.ecrire(cleBrouillonAppel(grp.id, date), pres);
+      const cle = cleBrouillonAppel(grp.id, date);
+      const serveur = etatServeur(grp, date);
+      const identique = Object.keys(pres).length === Object.keys(serveur).length &&
+        Object.keys(pres).every(id => pres[id] === serveur[id]);
+      if (identique && appelFait(grp.id, date)) Local.effacer(cle);
+      else Local.ecrire(cle, pres);
     }
   }, [pres, grp, date, etape]);
 
@@ -3324,34 +3389,50 @@ function ModuleAppel({
   }
   // Un appel laissé en plan vaut mieux qu'une liste repartie de zéro : le
   // brouillon local l'emporte sur ce qu'a renvoyé le serveur.
-  const etatPour = (g, d) => {
-    const brouillon = Local.lire(cleBrouillonAppel(g.id, d), null);
-    if (brouillon && Object.keys(brouillon).length) return { pres: brouillon, repris: !appels[`ap:${g.id}:${d}`] };
-    const ex = appels[`ap:${g.id}:${d}`];
-    if (ex) return { pres: ex, repris: false };
+  // Chaque élève du groupe part « présent », puis ce que porte le serveur
+  // l'emporte. Un cours sans aucune présence (créé par un compte rendu, ou un
+  // envoi interrompu) ne vaut donc pas un appel fait, et un élève arrivé
+  // dans le groupe après coup figure bien dans ce qui sera enregistré.
+  const etatServeur = (g, d) => {
     const p = {};
     (g.eids || []).forEach(id => {
       p[id] = "present";
     });
-    return { pres: p, repris: false };
+    return { ...p, ...(appels[`ap:${g.id}:${d}`] || {}) };
   };
+  const etatPour = (g, d) => {
+    const brouillon = Local.lire(cleBrouillonAppel(g.id, d), null);
+    const surServeur = appelFait(g.id, d);
+    if (brouillon && Object.keys(brouillon).length) return { pres: { ...etatServeur(g, d), ...brouillon }, repris: !surServeur };
+    return { pres: etatServeur(g, d), repris: false };
+  };
+  const appelFait = (gid, d) => Object.keys(appels[`ap:${gid}:${d}`] || {}).length > 0;
   const ouvrir = g => {
     if (estFuture(date)) {
       signalerErreur(`Le ${fmtDateLongue(date)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
       return;
     }
     setGrp(g);
+    setOnglet("appel");
     const { pres: p, repris } = etatPour(g, date);
     setPres(p);
     if (repris) signalerInfo("Appel repris là où vous l'aviez laissé.");
     setEtape("appel");
   };
   const changerDate = d => {
+    if (estFuture(d)) {
+      signalerErreur(`Le ${fmtDateLongue(d)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
+      return;
+    }
     setDate(d);
     if (!grp) return;
     setPres(etatPour(grp, d).pres);
   };
   const enregistrer = async () => {
+    if (estFuture(date)) {
+      signalerErreur(`Le ${fmtDateLongue(date)} n'est pas encore arrivé : l'appel se fait le jour de la séance.`);
+      return;
+    }
     setEnregistrement(true);
     try {
       const { enAttente: differe } = await envoyerAppel(onSaveAppel, grp.id, date, pres);
@@ -3468,7 +3549,7 @@ function ModuleAppel({
       gap: 10
     }
   }, groupesTenus.map(g => {
-    const fait = !!appels[`ap:${g.id}:${date}`];
+    const fait = appelFait(g.id, date);
     return /*#__PURE__*/React.createElement("div", {
       key: g.id,
       style: {
@@ -3823,13 +3904,14 @@ function ModuleAppel({
   }, "📅"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: date,
+    max: todayStr(),
     onChange: e => changerDate(e.target.value),
     style: {
       flex: 1,
       background: "transparent",
       border: "none",
       color: C.texte,
-      fontSize: 14,
+      fontSize: 16,
       fontFamily: "inherit",
       outline: "none",
       colorScheme: "light"
@@ -4769,7 +4851,7 @@ async function envoyerAuParent({ facture, eleve, parametres, seuil, fenetre, rel
 // Le bandeau qui suit l'envoi : succès net, ou ce qui manque, sans bloquer.
 const direResultatEnvoi = (r, qui, numero) => {
   if (r.soucis.length) signalerInfo(`Facture ${numero} : WhatsApp s'ouvre sur ${qui}, mais sans ${r.soucis.join(" ni ")}. Le PDF peut se joindre depuis la carte (📎).`);
-  else signalerSucces(`Facture ${numero} prête — WhatsApp s'ouvre sur ${qui}, avec le PDF et le lien de paiement. Appuyez sur Envoyer.`);
+  else signalerSucces(`Facture ${numero} prête — WhatsApp s'ouvre sur ${qui}, avec la facture PDF. Appuyez sur Envoyer.`);
 };
 // ─── VUE IMPRESSION ──────────────────────────────────────────
 // La facture telle qu'elle part chez les parents. Deux états bien distincts :
@@ -5032,8 +5114,12 @@ function ModuleFacturation({
   const eleveDe = eid => eleves.find(x => x.id === eid);
   // Ne reste à enregistrer que la note : le montant vient de l'appel, et le statut
   // se déduit des versements.
+  // On repart de la facture telle que la base la connaît maintenant, pas de la
+  // copie prise à l'ouverture de la fenêtre : un versement enregistré entre-temps
+  // a pu la solder, et réécrire l'ancien statut la rouvrirait.
   const handleSave = async data => {
-    await onSaveFacture(modal.f?.id || null, modal.e.id, { ...modal.f, ...data });
+    const actuelle = (modal.f?.id && factures.find(f => f.id === modal.f.id)) || modal.f;
+    await onSaveFacture(actuelle?.id || null, modal.e.id, { ...actuelle, ...data });
   };
   const encaissementsDe = fid => (encaissements || []).filter(e => e.factureId === fid);
   // Renvoie true si la suppression a bien eu lieu (permet d'attendre la confirmation
@@ -5424,7 +5510,8 @@ function ModuleFacturation({
         fontSize: 13,
         color: C.gray
       }
-    }, nb, " séance", nb > 1 ? "s" : "", " × 2h × ", e.th, "€ ", /*#__PURE__*/React.createElement("span", {
+    }, nb, " séance", nb > 1 ? "s" : "", " × ", dureeSeancesTxt(dates), " × ", montantTxt(e.th), "/h",
+      dates.some(d => d.offert) ? ` (dont ${dates.filter(d => d.offert).length} offerte${dates.filter(d => d.offert).length > 1 ? "s" : ""})` : "", " ", /*#__PURE__*/React.createElement("span", {
       style: {
         fontStyle: "italic"
       }
@@ -6264,8 +6351,13 @@ function ModuleStages({
     }
   };
 
+  // Une facture annulée ou supprimée ne retient plus l'élève dans le stage.
+  const factureActive = i => {
+    const f = i.factureId && (factures || []).find(x => x.id === i.factureId);
+    return !!f && f.statut !== "annulee";
+  };
   const desinscrire = async (inscription, el) => {
-    if (inscription.factureId) {
+    if (factureActive(inscription)) {
       signalerErreur({ message: "Cet élève est déjà facturé : annulez d'abord sa facture dans Factures." });
       return;
     }
@@ -6387,7 +6479,7 @@ function ModuleStages({
                     euros(i.tarif),
                     f && f.numero ? ` · ${f.numero}` : f ? " · brouillon" : " · pas encore facturé")),
                 f ? h(StatutBadge, { statut: f.statut }) : null,
-                !i.factureId
+                !factureActive(i)
                   ? h("button", {
                       onClick: () => desinscrire(i, el),
                       title: "Retirer du stage",
@@ -6571,10 +6663,10 @@ function ModuleDashboard({
     c: C.texte
   }, {
     e: "💰",
-    v: `${caMois}€`,
+    v: montantTxt(caMois),
     l: "CA ce mois",
     c: C.green,
-    sub: `${caPaye}€ encaissé`
+    sub: `${montantTxt(caPaye)} encaissé`
   }, {
     e: "✅",
     v: `${taux}%`,
@@ -6657,7 +6749,7 @@ function ModuleDashboard({
         color: isL ? C.texte : C.gray,
         fontWeight: isL ? 700 : 400
       }
-    }, d.v > 0 ? `${d.v}€` : ""), /*#__PURE__*/React.createElement("div", {
+    }, d.v > 0 ? montantTxt(d.v) : ""), /*#__PURE__*/React.createElement("div", {
       // Une hauteur en pixels : le parent n'a pas de hauteur propre, et un
       // pourcentage s'y réduisait à rien — les barres ne s'affichaient pas.
       style: {
@@ -7748,7 +7840,7 @@ function MiniArea({ label, value, onChange, placeholder, rows }) {
       rows: rows || 2,
       style: {
         width: "100%", background: C.surface, border: `1px solid ${C.bord}`,
-        borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 14, fontFamily: "inherit",
+        borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 16, fontFamily: "inherit",
         outline: "none", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5
       }
     })
@@ -7926,24 +8018,33 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
     comptesRendus.filter(c => c.groupe_id === grp.id).flatMap(c => splitNotions(c.notions))
   )].slice(0, 8);
 
-  const appliquerATous = () => {
+  // Ajoute le tronc commun aux notions de chaque élève présent.
+  const avecCommun = base => {
     const t = commun.trim();
-    if (!t) return;
-    const next = { ...brouillon };
+    if (!t) return base;
+    const next = { ...base };
     listeIds.forEach(id => {
       const v = next[id] || {};
       const deja = splitNotions(v.notions).some(x => x.toLowerCase() === t.toLowerCase());
       next[id] = { ...v, notions: deja ? v.notions : ((v.notions || "").trim() ? `${v.notions.trim()}, ${t}` : t) };
     });
-    setBrouillon(next);
+    return next;
+  };
+  const appliquerATous = () => {
+    if (!commun.trim()) return;
+    setBrouillon(avecCommun(brouillon));
     setCommun("");
   };
 
+  // Un tronc commun tapé mais pas encore « appliqué » est enregistré quand même :
+  // on ne perd pas ce qui a été écrit pour un bouton oublié.
   const enregistrer = async () => {
     setSaving(true);
     try {
+      const source = avecCommun(brouillon);
+      if (commun.trim()) { setBrouillon(source); setCommun(""); }
       const complet = {};
-      listeIds.forEach(id => { complet[id] = brouillon[id] || {}; });
+      listeIds.forEach(id => { complet[id] = source[id] || {}; });
       await onSave(grp.id, date, complet, monProfilId);
       setEtape("confirme");
     } catch (e) {
@@ -7968,7 +8069,7 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
       h("span", { style: { fontSize: 13, color: C.gray } }, "📅"),
       h("input", {
         type: "date", value: date, onChange: e => changerDate(e.target.value),
-        style: { flex: 1, background: "transparent", border: "none", color: C.texte, fontSize: 14, fontFamily: "inherit", outline: "none", colorScheme: "light" }
+        style: { flex: 1, background: "transparent", border: "none", color: C.texte, fontSize: 16, fontFamily: "inherit", outline: "none", colorScheme: "light" }
       }),
       h("span", { style: { fontSize: 11, fontWeight: 700, color: nbRemplis ? C.gold : C.gray } }, `${nbRemplis}/${listeIds.length}`)
     ),
@@ -7984,9 +8085,9 @@ function ModuleSuivi({ eleves, groupes, appels, comptesRendus, monProfilId, onSa
         onChange: e => setCommun(e.target.value),
         placeholder: "Théorème de Thalès, exercices d'application…",
         rows: 2,
-        style: { width: "100%", background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", resize: "vertical", marginBottom: 8, lineHeight: 1.5 }
+        style: { width: "100%", background: C.surface, border: `1px solid ${C.bord}`, borderRadius: 8, padding: "9px 11px", color: C.texte, fontSize: 16, fontFamily: "inherit", outline: "none", boxSizing: "border-box", resize: "vertical", marginBottom: 8, lineHeight: 1.5 }
       }),
-      h(BtnPrimary, { label: `↓ Appliquer aux ${listeIds.length} élèves`, onClick: appliquerATous, disabled: !commun.trim(), full: true })
+      h(BtnPrimary, { label: listeIds.length === 1 ? "↓ Appliquer à l'élève" : `↓ Appliquer aux ${listeIds.length} élèves`, onClick: appliquerATous, disabled: !commun.trim(), full: true })
     ),
 
     listeIds.length === 0
@@ -8022,6 +8123,11 @@ function App() {
   const [stages, setStages] = useState([]);
   const [inscrits, setInscrits] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
+  // Vrai dès que les données sont arrivées une fois. Les rechargements suivants
+  // (après un appel, un élève créé…) ne remplacent plus l'écran par le
+  // chargement : cela démontait le module ouvert et perdait l'écran du compte
+  // rendu, ou le mot de passe tout juste créé d'un élève.
+  const [dejaCharge, setDejaCharge] = useState(false);
   const [dataError, setDataError] = useState("");
   const [tab, setTab] = useState("dashboard");
   const [monRole, setMonRole] = useState(null);
@@ -8071,9 +8177,11 @@ function App() {
       }
       setComptesRendus(cr);
     } catch (e) {
-      setDataError(e.message || "Erreur de chargement des données");
+      if (dejaCharge) signalerErreur("Actualisation impossible : " + (e.message || "erreur de chargement"));
+      else setDataError(e.message || "Erreur de chargement des données");
     }
     setLoadingData(false);
+    setDejaCharge(true);
   };
   const chargerProfilEtDonnees = async () => {
     setLoadingData(true);
@@ -8125,9 +8233,11 @@ function App() {
         if (pf) setProfs(pf);
       }
     } catch (e) {
-      setDataError(e.message || "Erreur de chargement des données");
+      if (dejaCharge) signalerErreur("Actualisation impossible : " + (e.message || "erreur de chargement"));
+      else setDataError(e.message || "Erreur de chargement des données");
     }
     setLoadingData(false);
+    setDejaCharge(true);
   };
   useEffect(() => {
     if (session) chargerProfilEtDonnees();
@@ -8153,6 +8263,7 @@ function App() {
   };
   const doLogout = async () => {
     await sb.auth.signOut();
+    setDejaCharge(false);
     setTab("dashboard");
   };
   const handleCreateEleve = async form => {
@@ -8301,7 +8412,7 @@ function App() {
     error: authError,
     loading: authLoading
   });
-  if (loadingData) return /*#__PURE__*/React.createElement(LoadingScreen, {
+  if (loadingData && !dejaCharge) return /*#__PURE__*/React.createElement(LoadingScreen, {
     msg: "Synchronisation des données…"
   });
   if (dataError) return /*#__PURE__*/React.createElement("div", {

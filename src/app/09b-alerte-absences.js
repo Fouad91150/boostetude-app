@@ -57,7 +57,7 @@ const listeDatesAbsences = (dates, puce) => dates.map(d => `${puce} ${fmtDateLon
 
 const makeAlerteAbsencesEmail = (e, dates) => ({
   sujet: `Absences répétées de ${e.prenom} ${e.nom} — Boost'Étude`,
-  corps: `Bonjour ${e.parent || ""},\n\n`.replace(" ,", ",") +
+  corps: `${salut(e)},\n\n` +
          `${e.prenom} a manqué ${dates.length} séances sans justificatif depuis la rentrée :\n` +
          `${listeDatesAbsences(dates, "-")}\n\n` +
          `En petit groupe, la régularité fait l'essentiel des progrès, et chaque séance manquée se rattrape difficilement. ` +
@@ -71,7 +71,7 @@ const makeAlerteAbsencesSMS = (e, dates) =>
 
 const makeAlerteAbsencesWhatsApp = (e, dates) =>
   `*Boost'Étude — Absences de ${e.prenom}*\n\n` +
-  `Bonjour ${e.parent || ""},\n\n`.replace(" ,", ",") +
+  `${salut(e)},\n\n` +
   `${e.prenom} a manqué *${dates.length} séances sans justificatif* depuis la rentrée :\n` +
   `${listeDatesAbsences(dates, "•")}\n\n` +
   `La régularité fait l'essentiel des progrès en petit groupe. Pourriez-vous nous dire ce qui empêche ${e.prenom} de venir ? ` +

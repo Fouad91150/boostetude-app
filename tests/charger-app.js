@@ -61,7 +61,7 @@ export function chargerApp() {
              BlocConformite, champsManquants, versCSV, ModuleFacturation, ModuleAppel, App, api, C,
              ModuleSuivi, CarteSuiviEleve,
              envoyerAuParent, preparerLiens, montantSeances, normalizeEleveDB, appliquerPart, appliquerRemiseMulti, estGratuit, LIBELLE_PART, notesAvecTarif, identifiantPropose, motDePasseEleve, cheminAudio, nbAudios, OngletCoursEnLigne, identifiantProfPropose, emailDeConnexion, messageAccesProf, messageAccesEleve, aEspaceEleve, FicheEleve, premieresParMatiere, toutLire, dejaFacturees, brouillonsEnRetard, lignesFacture, lignesRecettes, estFuture, jourDeLaDate,
-             lundiDe, addJours, isoSemaine, libelleSemaine, telWhatsApp, splitNotions,
+             lundiDe, addJours, isoSemaine, libelleSemaine, telWhatsApp, salut, splitNotions,
              estCompteRenduVide,
              phrase,
              Local, fileAppels, envoyerAppel, rejouerFileAppels, estPanneReseau,

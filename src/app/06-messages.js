@@ -35,7 +35,7 @@ const signatureBoost = "Boost'Étude";
 // libellé et un prix. `prestation`, quand elle est là, remplace le décompte.
 const makeFactureEmail = (e, mois, nb, total, dates, seuil, prestation) => ({
   sujet: `Facture ${mois} — ${e.prenom} ${e.nom} — Boost'Étude`,
-  corps: `Bonjour ${e.parent},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
+  corps: `${salut(e)},\n\nVoici la facture de ${e.prenom} pour ${mois}.\n\n` +
          (prestation ? `${prestation}\n` : `Séances : ${nb} × ${dureeSeancesTxt(dates)} × ${euros(e.th)}/h${detailMatieresTxt(dates)}\n`) +
          `TOTAL : ${montantTxt(total)}\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\n` +
@@ -62,7 +62,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
   // Titre sans gras sur toute la ligne : WhatsApp affichait un « * » orphelin
   // (capture du 13/10). Le gras ne porte que sur le numéro.
   return `🧾 *Facture ${mois}* — Boost'Étude\n\n` +
-         `Bonjour ${e.parent},\n\n` +
+         `${salut(e)},\n\n` +
          `Voici la facture de ${e.prenom} :\n` +
          lignes +
          (prestation
@@ -80,7 +80,7 @@ const makeFactureWhatsApp = (e, mois, nb, total, dates, seuil, prestation, liens
 };
 const makeRappelEmail = (e, mois, total, dates) => ({
   sujet: `Rappel règlement ${mois} — ${e.prenom} ${e.nom}`,
-  corps: `Bonjour ${e.parent},\n\nRappel : le règlement de ${montantTxt(total)} pour ${e.prenom} (${mois}) est en attente.${detailMatieresTxt(dates)}\n\n` +
+  corps: `${salut(e)},\n\nRappel : le règlement de ${montantTxt(total)} pour ${e.prenom} (${mois}) est en attente.${detailMatieresTxt(dates)}\n\n` +
          `${MOYENS_PAIEMENT_TEXTE(e)}\n\nMerci,\n${signatureBoost}`
 });
 const makeRappelSMS = (e, mois, total) =>
@@ -89,9 +89,9 @@ const makeRappelSMS = (e, mois, total) =>
   `Espèces, virement ou Wero (référence : ${e.prenom} ${e.nom}). Merci !`;
 const makeAbsenceEmail = (e, dateLabel, justifie) => ({
   sujet: `Absence de ${e.prenom} ${e.nom} — ${dateLabel} — Boost'Étude`,
-  corps: justifie ? `Bonjour ${e.parent},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude\nboostetude@gmail.com` : `Bonjour ${e.parent},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude\nboostetude@gmail.com`
+  corps: justifie ? `${salut(e)},\n\nNous confirmons l'absence justifiée de ${e.prenom} à la séance du ${dateLabel}.\n\nÀ bientôt,\nBoost'Étude\nboostetude@gmail.com` : `${salut(e)},\n\nNous vous informons que ${e.prenom} était absent(e) à la séance du ${dateLabel}. Merci de nous tenir informés du motif si besoin.\n\nCordialement,\nBoost'Étude\nboostetude@gmail.com`
 });
-const makeAbsenceSMS = (e, dateLabel, justifie) => justifie ? `Boost'Étude : bonjour ${e.parent}, nous confirmons l'absence justifiée de ${e.prenom} le ${dateLabel}. Merci !` : `Boost'Étude : bonjour ${e.parent}, ${e.prenom} était absent(e) le ${dateLabel}. Merci de nous contacter si besoin.`;
+const makeAbsenceSMS = (e, dateLabel, justifie) => justifie ? `Boost'Étude : ${salut(e, "bonjour")}, nous confirmons l'absence justifiée de ${e.prenom} le ${dateLabel}. Merci !` : `Boost'Étude : ${salut(e, "bonjour")}, ${e.prenom} était absent(e) le ${dateLabel}. Merci de nous contacter si besoin.`;
 const {
   useState,
   useEffect
@@ -105,7 +105,7 @@ const makeRappelWhatsApp = (e, reference, reste, dates, dejaVerse, liens, p) => 
     ? detail.map(g => `• ${g.matiere} : ${g.dates.length} séance${g.dates.length > 1 ? "s" : ""}`).join("\n") + "\n"
     : "";
   return (reference ? `🔔 *Rappel facture ${reference}* — Boost'Étude` : `🔔 Rappel — Boost'Étude`) + "\n\n" +
-         `Bonjour ${e.parent},\n\n` +
+         `${salut(e)},\n\n` +
          `Un petit rappel au sujet de la facture de ${e.prenom} :\n` +
          lignes +
          ((dejaVerse || 0) > 0 ? `• Déjà versé : ${montantTxt(dejaVerse)}\n` : "") +

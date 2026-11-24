@@ -16,7 +16,11 @@ function ModuleEleves({
     setTimeout(() => setToast(null), 2500);
   };
   const actifs = eleves.filter(e => e.actif !== false);
-  const filtered = actifs.filter(e => !search || `${e.prenom} ${e.nom} ${e.niveau}`.toLowerCase().includes(search.toLowerCase()));
+  // Les élèves désactivés restent consultables (et réactivables depuis leur fiche).
+  const inactifs = eleves.filter(e => e.actif === false);
+  const [voirInactifs, setVoirInactifs] = useState(false);
+  const source = voirInactifs ? inactifs : actifs;
+  const filtered = source.filter(e => !search || `${e.prenom} ${e.nom} ${e.niveau}`.toLowerCase().includes(search.toLowerCase()));
   // Un élève peut suivre plusieurs matières (ex. Maths + Physique) : on liste tous les
   // groupes où il apparaît (eleves_groupes, reflété dans groupes[].eids), pas un seul.
   const matieresDe = eid => {
@@ -103,13 +107,20 @@ function ModuleEleves({
     l: "Actifs",
     c: C.texte
   }, {
-    e: "📋",
-    v: eleves.length,
-    l: "Total",
-    c: C.texte
-  }].map((s, i) => /*#__PURE__*/React.createElement("div", {
+    e: "💤",
+    v: inactifs.length,
+    l: voirInactifs ? "Désactivés (affichés)" : "Désactivés",
+    c: C.texte,
+    clic: inactifs.length > 0 ? () => setVoirInactifs(!voirInactifs) : null
+  }].map((s, i) => /*#__PURE__*/React.createElement(s.clic ? "button" : "div", {
     key: i,
+    onClick: s.clic || undefined,
+    "aria-pressed": s.clic ? voirInactifs : undefined,
     style: {
+      fontFamily: "inherit",
+      cursor: s.clic ? "pointer" : "default",
+      width: "100%",
+      ...(i === 1 && voirInactifs ? { outline: `2px solid ${C.gold}` } : {}),
       background: C.surface,
       border: `1px solid ${C.bord}`,
       borderRadius: 12,
@@ -241,7 +252,7 @@ function ModuleEleves({
       marginBottom: 12,
       fontSize: 13
     }
-  }, "Aucun élève pour l'instant — les inscriptions démarrent à la rentrée."), /*#__PURE__*/React.createElement(BtnPrimary, {
+  }, search ? `Aucun élève ne correspond à « ${search} ».` : voirInactifs ? "Aucun élève désactivé." : "Aucun élève pour l'instant — les inscriptions démarrent à la rentrée."), !search && !voirInactifs && /*#__PURE__*/React.createElement(BtnPrimary, {
     label: "+ Ajouter un élève",
     onClick: () => {
       setSel(null);

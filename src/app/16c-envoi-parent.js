@@ -42,5 +42,5 @@ async function envoyerAuParent({ facture, eleve, parametres, seuil, fenetre, rel
 // Le bandeau qui suit l'envoi : succès net, ou ce qui manque, sans bloquer.
 const direResultatEnvoi = (r, qui, numero) => {
   if (r.soucis.length) signalerInfo(`Facture ${numero} : WhatsApp s'ouvre sur ${qui}, mais sans ${r.soucis.join(" ni ")}. Le PDF peut se joindre depuis la carte (📎).`);
-  else signalerSucces(`Facture ${numero} prête — WhatsApp s'ouvre sur ${qui}, avec le PDF et le lien de paiement. Appuyez sur Envoyer.`);
+  else signalerSucces(`Facture ${numero} prête — WhatsApp s'ouvre sur ${qui}, avec la facture PDF. Appuyez sur Envoyer.`);
 };
