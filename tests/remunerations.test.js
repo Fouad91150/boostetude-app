@@ -108,9 +108,9 @@ describe("L'écran des professeurs", () => {
     assert.ok(html.includes("Mourad"));
   });
 
-  test("un professeur sans groupe n'apparaît pas", () => {
+  test("un professeur sans groupe n'apparaît pas dans les rémunérations (seulement dans les comptes)", () => {
     const html = rendre([PROF({ id: "p9", prenom: "Chakir" })], [GROUPE()], {});
-    assert.ok(!html.includes("Chakir"));
+    assert.equal((html.match(/Chakir/g) || []).length, 1, "une seule fois : la carte des comptes");
   });
 
   test("sans numéro, il propose de l'ajouter et de copier le message", () => {
@@ -153,11 +153,28 @@ describe("Le récapitulatif envoyé au professeur", () => {
     ];
     const t = makeRemunerationWhatsApp(PROF(), "2026-10", seances, 4, 100, 25);
     assert.match(t, /Octobre 2026/);
-    assert.match(t, /4e \(4 présents\)/);
-    assert.match(t, /2 séances de 2 h, soit \*4 h\*/);
+    assert.match(t, /4e, 2 h \(4 présents\)/);
+    assert.match(t, /2 séances, soit \*4 h\*/);
     assert.match(t, /25 €\/h/);
     assert.match(t, /Total : 100 €/);
     assert.match(t, /Boost'Étude$/m);
+  });
+});
+
+describe("Séances du primaire : 1 h 30", () => {
+  test("une séance d'un groupe de CM1 compte 1 h 30", () => {
+    const { duAuProf } = chargerApp();
+    const groupes = [{ id: "gp", nom: "Primaire", niveau: "CM1", profId: "p1" }, { id: "g4", nom: "4e", niveau: "4ème", profId: "p1" }];
+    const appels = { "ap:gp:2026-10-07": { e1: "present" }, "ap:g4:2026-10-08": { e2: "present" } };
+    const r = duAuProf({ id: "p1", taux_horaire: 20 }, "2026-10", appels, groupes);
+    assert.equal(r.heures, 3.5);
+    assert.equal(r.montant, 70);
+  });
+  test("le récapitulatif écrit 1 h 30", () => {
+    const { makeRemunerationWhatsApp } = chargerApp();
+    const t = makeRemunerationWhatsApp(PROF(), "2026-10", [{ date: "2026-10-07", groupe: "Primaire", presents: 5, duree: 1.5 }], 1.5, 30, 20);
+    assert.match(t, /Primaire, 1 h 30/);
+    assert.match(t, /\*1 h 30\*/);
   });
 });
 
